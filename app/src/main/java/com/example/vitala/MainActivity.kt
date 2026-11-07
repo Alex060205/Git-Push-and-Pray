@@ -16,6 +16,7 @@ import androidx.compose.runtime.setValue
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.tooling.preview.Preview
 import androidx.lifecycle.lifecycleScope
+import com.example.vitala.data.GoogleWeatherService
 import com.example.vitala.ui.theme.VitalaTheme
 import com.google.firebase.Firebase
 import com.google.firebase.ai.ai
@@ -26,23 +27,45 @@ class MainActivity : ComponentActivity() {
 
     // Text shown on screen; Compose redraws when this changes
     private var geminiReply by mutableStateOf("Asking Gemini...")
+    private var weatherText by mutableStateOf("Getting weather...")
 
     override fun onCreate(savedInstanceState: Bundle?) {
+
         super.onCreate(savedInstanceState)
         enableEdgeToEdge()
 
 //        AppContainer.init()   // loads demo data
 //        testGemini()
+        testWeather()
 
         setContent {
             VitalaTheme {
                 Scaffold(modifier = Modifier.fillMaxSize()) { innerPadding ->
-//                    Greeting(
-//                        message = geminiReply,
-//                        modifier = Modifier.padding(innerPadding)
-//                    )
+                    Greeting(
+                        message = weatherText,
+                        modifier = Modifier.padding(innerPadding)
+                    )
                 }
             }
+        }
+    }
+
+    /** Temporary: calls the Google Weather API once and shows the result on screen. */
+    private fun testWeather() {
+        val weatherService = GoogleWeatherService(BuildConfig.WEATHER_API_KEY)
+
+        lifecycleScope.launch {
+            val weather = weatherService.getCurrent()
+            weatherText = if (weather == null) {
+                "Weather failed. Check Logcat, filter: GoogleWeatherService"
+            } else {
+                "Edmonton now\n" +
+                        "Condition: ${weather.condition}\n" +
+                        "Temperature: ${weather.temperatureC} °C\n" +
+                        "Humidity: ${weather.humidityPercent} %\n" +
+                        "Pressure: ${weather.pressureHpa} hPa"
+            }
+            Log.d("WeatherTest", weather.toString())
         }
     }
 

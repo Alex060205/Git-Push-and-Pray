@@ -14,6 +14,7 @@ import java.util.UUID
  * @param nutrition Nutrition
  * @param tookAllMedications Whether the patient took all their medications
  * @param weather Weather at the time of the check-in
+ * @param exerciseIntensity The intensity of the exercise done the day before
  * @constructor Creates a new daily check-in object with the given parameters
  */
 data class DailyCheckIn(
@@ -25,7 +26,8 @@ data class DailyCheckIn(
     val mood: Mood,
     val nutrition: Nutrition,
     val tookAllMedications: Boolean,
-    val weather: WeatherSnapshot? = null
+    val weather: WeatherSnapshot? = null,
+    val exerciseIntensity: Intensity
 ) {
     init {
         require(painLevel in 0..10) { "Pain level must be 0-10" }

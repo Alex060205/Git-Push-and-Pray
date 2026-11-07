@@ -1,3 +1,5 @@
+import java.util.Properties
+
 plugins {
     alias(libs.plugins.android.application)
     alias(libs.plugins.kotlin.compose)
@@ -18,6 +20,9 @@ android {
         versionName = "1.0"
 
         testInstrumentationRunner = "androidx.test.runner.AndroidJUnitRunner"
+        val props = Properties().apply { rootProject.file("local.properties").inputStream().use { load(it) } }
+        buildConfigField("String", "WEATHER_API_KEY", "\"${props.getProperty("WEATHER_API_KEY", "")}\"")
+
     }
 
     buildTypes {
@@ -33,6 +38,7 @@ android {
     }
     buildFeatures {
         compose = true
+        buildConfig = true
     }
 }
 
