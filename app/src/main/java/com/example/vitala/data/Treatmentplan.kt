@@ -5,7 +5,9 @@ import java.time.LocalDate
 import java.time.LocalTime
 import java.util.UUID
 
-/** The physician's prescription. Acts as the upper limit for any exercise adjustment. */
+/** The physician's prescription. Acts as the upper limit for any exercise adjustment.
+ *
+ */
 data class TreatmentPlan(
     val id: String = UUID.randomUUID().toString(),
     val physicianName: String,
@@ -15,6 +17,9 @@ data class TreatmentPlan(
     val medications: List<Medication>,
     val isActive: Boolean = true
 ) {
+    /**
+     *
+     */
     fun exercisesFor(date: LocalDate): List<PrescribedExercise> =
         exercises.filter { date.dayOfWeek in it.days }
 

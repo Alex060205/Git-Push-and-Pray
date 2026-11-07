@@ -1,10 +1,15 @@
 package com.example.vitala
 
+import AvailabilityPreferences
+import com.example.vitala.data.BodyMetrics
 import java.time.DayOfWeek
 import java.time.LocalDate
 import java.time.LocalTime
 import java.util.UUID
 
+/**
+ *
+ */
 data class Patient(
     val id: String = UUID.randomUUID().toString(),
     val name: String,
@@ -13,31 +18,6 @@ data class Patient(
     val activePlanId: String? = null,
     val availability: AvailabilityPreferences = AvailabilityPreferences()
 )
-
-data class BodyMetrics(
-    val heightCm: Double,
-    val weightKg: Double,
-    val affectedJoints: List<String> = emptyList(),   // e.g. "Left knee"
-    val updatedOn: LocalDate,
-    val source: MetricsSource
-) {
-    init {
-        require(heightCm > 0) { "Height must be positive" }
-        require(weightKg > 0) { "Weight must be positive" }
-    }
-}
-
-/** Times the patient does not want exercises suggested ("Times to avoid" screen). */
-data class AvailabilityPreferences(
-    val blocksToAvoid: List<TimeBlock> = emptyList()
-) {
-    fun isAvoided(day: DayOfWeek, time: LocalTime): Boolean =
-        blocksToAvoid.any { it.contains(day, time) }
-
-    fun add(block: TimeBlock) = copy(blocksToAvoid = blocksToAvoid + block)
-
-    fun remove(blockId: String) = copy(blocksToAvoid = blocksToAvoid.filterNot { it.id == blockId })
-}
 
 /**
  * Examples:
