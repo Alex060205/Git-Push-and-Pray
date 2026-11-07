@@ -1,4 +1,4 @@
-package com.example.vitala
+package com.example.vitala.data
 
 import java.time.LocalDate
 

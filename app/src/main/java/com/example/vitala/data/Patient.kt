@@ -1,14 +1,23 @@
+<<<<<<< HEAD
+package com.example.vitala.data
+
+=======
 package com.example.vitala
 
 import AvailabilityPreferences
 import com.example.vitala.data.BodyMetrics
+>>>>>>> 1440c78383dfdaad572454e67eb916ff90aea6b5
 import java.time.DayOfWeek
 import java.time.LocalDate
 import java.time.LocalTime
 import java.util.UUID
 
 /**
+<<<<<<< HEAD
+ * A patient's profile.
+=======
  *
+>>>>>>> 1440c78383dfdaad572454e67eb916ff90aea6b5
  */
 data class Patient(
     val id: String = UUID.randomUUID().toString(),
@@ -17,6 +26,9 @@ data class Patient(
     val bodyMetrics: BodyMetrics,
     val activePlanId: String? = null,
     val availability: AvailabilityPreferences = AvailabilityPreferences()
+<<<<<<< HEAD
+)
+=======
 )
 
 /**
@@ -41,3 +53,4 @@ data class TimeBlock(
         val EVERY_DAY: Set<DayOfWeek> = DayOfWeek.entries.toSet()
     }
 }
+>>>>>>> 1440c78383dfdaad572454e67eb916ff90aea6b5

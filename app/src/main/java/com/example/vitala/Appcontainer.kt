@@ -1,4 +1,12 @@
 package com.example.vitala
+
+import com.example.vitala.data.ActivityLogRepository
+import com.example.vitala.data.CheckInRepository
+import com.example.vitala.data.InMemoryActivityLogRepository
+import com.example.vitala.data.InMemoryCheckInRepository
+import com.example.vitala.data.InMemoryPatientRepository
+import com.example.vitala.data.PatientRepository
+
 /**
  * One place to get the repositories from anywhere in the app.
  * Later, swap the InMemory classes for Room/Firestore ones here; nothing else changes.

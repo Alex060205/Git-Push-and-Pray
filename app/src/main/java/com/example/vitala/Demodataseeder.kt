@@ -1,5 +1,28 @@
 package com.example.vitala
 
+import com.example.vitala.data.ActivityLogRepository
+import com.example.vitala.data.AvailabilityPreferences
+import com.example.vitala.data.BodyMetrics
+import com.example.vitala.data.CheckInRepository
+import com.example.vitala.data.DailyCheckIn
+import com.example.vitala.data.DoseStatus
+import com.example.vitala.data.ExerciseItem
+import com.example.vitala.data.ExerciseSession
+import com.example.vitala.data.Intensity
+import com.example.vitala.data.Medication
+import com.example.vitala.data.MedicationLog
+import com.example.vitala.data.MedicationType
+import com.example.vitala.data.MetricsSource
+import com.example.vitala.data.Mood
+import com.example.vitala.data.Nutrition
+import com.example.vitala.data.PainDuration
+import com.example.vitala.data.PainFeeling
+import com.example.vitala.data.Patient
+import com.example.vitala.data.PatientRepository
+import com.example.vitala.data.PrescribedExercise
+import com.example.vitala.data.TimeBlock
+import com.example.vitala.data.TreatmentPlan
+import com.example.vitala.data.WeatherSnapshot
 import java.time.DayOfWeek
 import java.time.LocalDate
 import java.time.LocalTime
@@ -25,6 +48,11 @@ class DemoDataSeeder(
     private val random: Random = Random(42)
 ) {
 
+    /**
+     * Fills the repositories with a demo patient, the treatment plan from the mockups,
+     * and [days] days of history ending yesterday.
+     * If the repositories already have data, does nothing.
+     */
     fun seedIfEmpty(today: LocalDate = LocalDate.now(), days: Int = 14) {
         if (patients.getPatient() != null) return
         seed(today, days)
@@ -78,7 +106,12 @@ class DemoDataSeeder(
                         painLevel <= 6 -> Mood.OKAY
                         else -> Mood.BAD
                     },
-                    nutrition = listOf(Nutrition.GOOD, Nutrition.GOOD, Nutrition.OKAY, Nutrition.POOR)
+                    nutrition = listOf(
+                        Nutrition.GOOD,
+                        Nutrition.GOOD,
+                        Nutrition.OKAY,
+                        Nutrition.POOR
+                    )
                         .random(random),
                     tookAllMedications = allTaken,
                     weather = weather
@@ -105,7 +138,11 @@ class DemoDataSeeder(
                 TimeBlock(start = LocalTime.MIN, end = LocalTime.of(9, 0)),
                 TimeBlock(start = LocalTime.NOON, end = LocalTime.of(13, 0)),
                 TimeBlock(start = LocalTime.of(19, 0), end = LocalTime.MAX),
-                TimeBlock(start = LocalTime.MIN, end = LocalTime.MAX, days = setOf(DayOfWeek.SUNDAY))
+                TimeBlock(
+                    start = LocalTime.MIN,
+                    end = LocalTime.MAX,
+                    days = setOf(DayOfWeek.SUNDAY)
+                )
             )
         )
     )
@@ -114,7 +151,12 @@ class DemoDataSeeder(
         physicianName = "Dr. Garcia",
         createdOn = createdOn,
         exercises = listOf(
-            PrescribedExercise(name = "Knee bends", sets = 2, reps = 10, instructions = "Hold a chair for balance."),
+            PrescribedExercise(
+                name = "Knee bends",
+                sets = 2,
+                reps = 10,
+                instructions = "Hold a chair for balance."
+            ),
             PrescribedExercise(
                 name = "Leg raises", sets = 2, reps = 8,
                 days = setOf(DayOfWeek.MONDAY, DayOfWeek.WEDNESDAY, DayOfWeek.FRIDAY)
@@ -197,7 +239,11 @@ class DemoDataSeeder(
     private fun itemsFor(plan: TreatmentPlan, date: LocalDate, intensity: Intensity): List<ExerciseItem> =
         when (intensity) {
             Intensity.REST -> listOf(
-                ExerciseItem(exerciseId = "rest-stretch", name = "Light stretching", durationMinutes = 5)
+                ExerciseItem(
+                    exerciseId = "rest-stretch",
+                    name = "Light stretching",
+                    durationMinutes = 5
+                )
             )
             Intensity.GENTLE -> plan.exercisesFor(date).map { it.toItem(gentle = true) }
             Intensity.FULL -> plan.exercisesFor(date).map { it.toItem(gentle = false) }
