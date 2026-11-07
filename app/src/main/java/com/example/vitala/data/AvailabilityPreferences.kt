@@ -14,6 +14,8 @@ import java.time.LocalTime
 data class AvailabilityPreferences(
     val blocksToAvoid: List<TimeBlock> = emptyList()
 ) {
+    val daysAvailable: Any
+
     /**
      * Checks if a time block is avoided for a given day and time.
      * @param day Day of the week to check

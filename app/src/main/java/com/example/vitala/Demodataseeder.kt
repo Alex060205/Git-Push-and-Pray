@@ -144,7 +144,7 @@ class DemoDataSeeder(
                     days = setOf(DayOfWeek.SUNDAY)
                 )
             )
-        )
+        ),
     )
 
     private fun demoPlan(createdOn: LocalDate) = TreatmentPlan(
