@@ -8,7 +8,6 @@ import java.util.UUID
  * @param id Unique identifier
  * @param physicianName Name of the physician
  * @param createdOn Date of creation
- * @param version Version of the plan
  * @param exercises List of exercises
  * @param medications List of medications
  * @param isActive Whether the plan is active
@@ -16,11 +15,10 @@ import java.util.UUID
  */
 data class TreatmentPlan(
     val id: String = UUID.randomUUID().toString(),
-    val physicianName: String,
-    val createdOn: LocalDate,
-    val version: Int = 1,
-    val exercises: List<PrescribedExercise>,
-    val medications: List<Medication>,
+    val physicianName: String = "",
+    val createdOn: LocalDate = LocalDate.now(),
+    val exercises: List<PrescribedExercise> = emptyList(),
+    val medications: List<Medication> = emptyList(),
     val isActive: Boolean = true
 ) {
     init {

@@ -31,16 +31,16 @@ class MainActivity : ComponentActivity() {
         super.onCreate(savedInstanceState)
         enableEdgeToEdge()
 
-        AppContainer.init()   // loads demo data
-        testGemini()
+//        AppContainer.init()   // loads demo data
+//        testGemini()
 
         setContent {
             VitalaTheme {
                 Scaffold(modifier = Modifier.fillMaxSize()) { innerPadding ->
-                    Greeting(
-                        message = geminiReply,
-                        modifier = Modifier.padding(innerPadding)
-                    )
+//                    Greeting(
+//                        message = geminiReply,
+//                        modifier = Modifier.padding(innerPadding)
+//                    )
                 }
             }
         }

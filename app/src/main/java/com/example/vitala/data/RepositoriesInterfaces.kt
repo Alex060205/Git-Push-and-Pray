@@ -1,6 +1,7 @@
 package com.example.vitala.data
 
 import java.time.LocalDate
+/*
 
 // ---------- Interfaces (screens and logic only talk to these) ----------
 
@@ -100,3 +101,5 @@ class InMemoryActivityLogRepository : ActivityLogRepository {
         doses.values.filter { it.date in from..to }
             .sortedWith(compareBy({ it.date }, { it.scheduledTime }))
 }
+
+*/
