@@ -1,4 +1,4 @@
-package com.example.vitala
+package com.example.vitala.data
 
 /** Pain during / after an exercise (matches the "How did your exercise go?" screen). */
 enum class PainFeeling { NONE, SOME, A_LOT }
