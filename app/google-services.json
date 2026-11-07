@@ -1,0 +1,29 @@
+{
+  "project_info": {
+    "project_number": "114592271082",
+    "project_id": "vitala-ad573",
+    "storage_bucket": "vitala-ad573.firebasestorage.app"
+  },
+  "client": [
+    {
+      "client_info": {
+        "mobilesdk_app_id": "1:114592271082:android:0a5ad744bfdfeb7adae593",
+        "android_client_info": {
+          "package_name": "com.example.vitala"
+        }
+      },
+      "oauth_client": [],
+      "api_key": [
+        {
+          "current_key": "AIzaSyDtSj_-GV1EgSZtDKorT71j99hZeAmJm9Y"
+        }
+      ],
+      "services": {
+        "appinvite_service": {
+          "other_platform_oauth_client": []
+        }
+      }
+    }
+  ],
+  "configuration_version": "1"
+}
