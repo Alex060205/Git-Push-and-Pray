@@ -1,0 +1,39 @@
+# Gradle
+.gradle/
+build/
+/*/build/
+
+# Local machine settings (SDK path, keys)
+local.properties
+
+# Kotlin
+.kotlin/
+
+# Android Studio / IntelliJ
+*.iml
+.idea/
+captures/
+.externalNativeBuild/
+.cxx/
+
+# Build outputs
+*.apk
+*.aab
+*.ap_
+*.dex
+*.class
+bin/
+gen/
+out/
+release/
+
+# Logs
+*.log
+
+# OS files
+.DS_Store
+Thumbs.db
+
+# Signing keys
+*.jks
+*.keystore
