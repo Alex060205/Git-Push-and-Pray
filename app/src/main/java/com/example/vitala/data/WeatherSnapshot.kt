@@ -14,7 +14,7 @@ import java.time.LocalDateTime
 data class WeatherSnapshot(
     val takenAt: LocalDateTime,
     val temperatureC: Double,
-    val condition: String,               // e.g. "Rain"
+    val condition: String,      // e.g. "Rain"
     val humidityPercent: Int,
     val pressureHpa: Double
 )

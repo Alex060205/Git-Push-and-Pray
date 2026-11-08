@@ -98,26 +98,26 @@ fun PrescriptionScreen(vm: PrescriptionViewModel = viewModel()) {
 
             OutlinedButton(
                 onClick = { pickDocument.launch(arrayOf("application/pdf", "text/plain")) },
-                enabled = !state.isAnalyzing,
+                enabled = !state.busy,
                 modifier = Modifier.weight(1f)
             ) { Text("File") }
         }
 
         if (state.pages.isNotEmpty()) {
-            PageStrip(state.pages, enabled = !state.isAnalyzing, onRemove = vm::removePage)
+            PageStrip(state.pages, enabled = !state.busy, onRemove = vm::removePage)
             Row(
                 horizontalArrangement = Arrangement.spacedBy(8.dp),
                 verticalAlignment = Alignment.CenterVertically
             ) {
                 Button(
                     onClick = vm::analyzePages,
-                    enabled = !state.isAnalyzing,
+                    enabled = !state.busy,
                     modifier = Modifier.weight(1f)
                 ) {
                     val n = state.pages.size
                     Text(if (n == 1) "Read prescription" else "Read $n pages")
                 }
-                TextButton(onClick = vm::clearPages, enabled = !state.isAnalyzing) { Text("Clear") }
+                TextButton(onClick = vm::clearPages, enabled = !state.busy) { Text("Clear") }
             }
             Text(
                 "Add a photo for each page, then tap Read." +
@@ -151,16 +151,28 @@ fun PrescriptionScreen(vm: PrescriptionViewModel = viewModel()) {
             }
         }
 
-        if (state.isAnalyzing) {
+        if (state.busy) {
             Row(verticalAlignment = Alignment.CenterVertically) {
                 CircularProgressIndicator(modifier = Modifier.size(24.dp))
                 Spacer(Modifier.size(12.dp))
-                Text("Reading the prescription…")
+                Text(
+                    if (state.isAnalyzing) {
+                        "Reading and preparing prescription…"
+                    } else {
+                        "Saving or loading…"
+                    }
+                )
             }
         }
 
         state.error?.let { Text(it, color = MaterialTheme.colorScheme.error) }
 
+        state.status?.let { message ->
+            Text(
+                text = message,
+                style = MaterialTheme.typography.bodySmall
+            )
+        }
         state.prescription?.let { PrescriptionDetails(it) }
     }
 }

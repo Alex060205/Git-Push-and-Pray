@@ -8,6 +8,8 @@ import org.json.JSONArray
 import org.json.JSONObject
 import java.net.HttpURLConnection
 import java.net.URL
+import com.example.vitala.pacing.integration.AdaptivePlanCompiler
+import com.example.vitala.pacing.integration.CompiledExercise
 
 /**
  * Sends an exercise prescription (photo, PDF or text) to the Gemini API and
@@ -71,6 +73,91 @@ class PrescriptionExtractor(
         return parse(JSONObject(text))
     }
 
+    suspend fun compileAdaptive(
+        source: ExercisePrescription,
+        exerciseIndex: Int,
+        exerciseId: String
+    ): CompiledExercise {
+
+        check(apiKey.isNotBlank()) {
+            "Missing GEMINI_API_KEY in local.properties"
+        }
+
+        val body = JSONObject()
+            .put(
+                "contents",
+                JSONArray().put(
+                    JSONObject()
+                        .put("role", "user")
+                        .put(
+                            "parts",
+                            JSONArray().put(
+                                textPart(
+                                    AdaptivePlanCompiler.prompt(
+                                        source = source,
+                                        index = exerciseIndex
+                                    )
+                                )
+                            )
+                        )
+                )
+            )
+            .put(
+                "generationConfig",
+                JSONObject()
+                    .put("temperature", 0)
+                    .put(
+                        "responseMimeType",
+                        "application/json"
+                    )
+                    .put(
+                        "responseSchema",
+                        AdaptivePlanCompiler.schema
+                    )
+            )
+
+        val reply = JSONObject(
+            post(body.toString())
+        )
+
+        val candidate = reply
+            .optJSONArray("candidates")
+            ?.optJSONObject(0)
+            ?: throw IllegalStateException(
+                "Gemini returned no configuration candidate."
+            )
+
+        require(
+            candidate.optString("finishReason") == "STOP"
+        ) {
+            "Configuration extraction did not finish normally: " +
+                    candidate.optString("finishReason")
+        }
+
+        val parts = candidate
+            .getJSONObject("content")
+            .getJSONArray("parts")
+
+        val text = (0 until parts.length())
+            .map { parts.getJSONObject(it) }
+            .filterNot {
+                it.optBoolean("thought", false)
+            }
+            .joinToString("") {
+                it.optString("text", "")
+            }
+
+        require(text.isNotBlank()) {
+            "Gemini returned an empty configuration."
+        }
+
+        return AdaptivePlanCompiler.parse(
+            source = source,
+            index = exerciseIndex,
+            exerciseId = exerciseId,
+            json = text
+        )
+    }
     private suspend fun post(json: String): String = withContext(Dispatchers.IO) {
         val url = URL("https://generativelanguage.googleapis.com/v1beta/models/$modelName:generateContent")
         val conn = (url.openConnection() as HttpURLConnection).apply {
