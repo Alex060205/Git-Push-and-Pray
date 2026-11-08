@@ -77,10 +77,10 @@ data class ReportData(
             val pegInRange = peg.filter { it.date in range }.sortedBy { it.date }
 
             val rows = sessions
-                .filter { it.date in range }
+                .filter { it.localDate in range }
                 // Today's or future planned sessions aren't missing yet.
-                .filterNot { it.status == SessionStatus.PLANNED && !it.date.isBefore(today) }
-                .sortedWith(compareBy<ExerciseSession>({ it.date }, { it.scheduledTime }))
+                .filterNot { it.status == SessionStatus.PLANNED && !it.localDate.isBefore(today) }
+                .sortedWith(compareBy<ExerciseSession>({ it.localDate }, { it.localTime }))
                 .map { s ->
                     val result = when (s.status) {
                         SessionStatus.DONE -> SessionResult.FINISHED
@@ -89,7 +89,7 @@ data class ReportData(
                         SessionStatus.PLANNED -> SessionResult.NO_RECORD
                     }
                     val names = s.items.map { it.name }
-                        .ifEmpty { patient?.exercisesFor(s.date)?.map { it.name }.orEmpty() }
+                        .ifEmpty { patient?.exercisesFor(s.localDate)?.map { it.name }.orEmpty() }
                     SessionRow(s, result, names)
                 }
 

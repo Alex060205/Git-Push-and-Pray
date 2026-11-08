@@ -49,7 +49,7 @@ import java.io.File
 import java.time.DayOfWeek
 
 /** Temporary: true = report data goes through Firestore; false = built straight from sample data. */
-private const val USE_FIREBASE = false
+private const val USE_FIREBASE = true
 
 class MainActivity : ComponentActivity() {
 

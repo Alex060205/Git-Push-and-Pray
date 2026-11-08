@@ -9,7 +9,6 @@ import com.google.firebase.firestore.firestore
 import kotlinx.coroutines.tasks.await
 import java.time.LocalDate
 import java.time.LocalTime
-import kotlin.toString
 
 /**
  * Stores daily check-ins, exercise sessions and weekly PEG answers in Firestore:
@@ -20,7 +19,6 @@ import kotlin.toString
  *
  * Dates are stored as "yyyy-MM-dd" strings and enums by name. Firestore can't store LocalDate
  * directly, and ISO date strings sort correctly, so date-range queries need no extra index.
- * Mapping is written out by hand so the model classes can keep `val`s, LocalDate and validation.
  */
 class HealthLogRepository(private val db: FirebaseFirestore = Firebase.firestore) {
 
@@ -110,9 +108,9 @@ class HealthLogRepository(private val db: FirebaseFirestore = Firebase.firestore
     }.onFailure { Log.w(TAG, "Skipping unreadable check-in $id", it) }.getOrNull()
 
     private fun ExerciseSession.toFirestore(): Map<String, Any?> = mapOf(
-        "date" to date.toString(),
-        "scheduledTime" to scheduledTime.toString(),
-        "intensity" to intensity.name,
+        "patientId" to patientId,
+        "date" to date,
+        "scheduledTime" to scheduledTime,
         "status" to status.name,
         "painBefore" to painBefore?.name,
         "painDuring" to painDuring?.name,
@@ -127,9 +125,9 @@ class HealthLogRepository(private val db: FirebaseFirestore = Firebase.firestore
     private fun DocumentSnapshot.toSession(): ExerciseSession? = runCatching {
         ExerciseSession(
             id = id,
-            date = LocalDate.parse(getString("date")!!),
-            scheduledTime = LocalTime.parse(getString("scheduledTime")!!),
-            intensity = enumOf<Intensity>("intensity")!!,
+            patientId = getString("patientId").orEmpty(),
+            date = getString("date")!!.also { LocalDate.parse(it) },          // reject malformed dates
+            scheduledTime = (getString("scheduledTime") ?: "00:00").also { LocalTime.parse(it) },
             items = emptyList(), // TODO: read ExerciseItems back (see toFirestore)
             status = enumOf<SessionStatus>("status") ?: SessionStatus.PLANNED,
             painBefore = enumOf<PainFeeling>("painBefore"),

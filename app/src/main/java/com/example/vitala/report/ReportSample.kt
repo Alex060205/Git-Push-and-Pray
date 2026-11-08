@@ -3,7 +3,6 @@ package com.example.vitala.report
 import com.example.vitala.data.DailyCheckIn
 import com.example.vitala.data.ExerciseSession
 import com.example.vitala.data.HealthLogRepository
-import com.example.vitala.data.Intensity
 import com.example.vitala.data.PainFeeling
 import com.example.vitala.data.Patient
 import com.example.vitala.data.PegResponse
@@ -15,7 +14,6 @@ import com.example.vitala.data.StopReason
 import com.example.vitala.data.SymptomResponse
 import java.time.Instant
 import java.time.LocalDate
-import java.time.LocalTime
 import java.time.temporal.ChronoUnit
 
 /**
@@ -109,9 +107,8 @@ object ReportSample {
         val sessions = SESSIONS.mapIndexed { i, s ->
             ExerciseSession(
                 id = "sample-session-$i",
-                date = LocalDate.of(2026, s.month, s.day).plusDays(shift),
-                scheduledTime = if (i % 2 == 0) LocalTime.of(9, 0) else LocalTime.of(18, 0),
-                intensity = if (s.during == A_LOT) Intensity.GENTLE else Intensity.FULL,
+                date = LocalDate.of(2026, s.month, s.day).plusDays(shift).toString(),
+                scheduledTime = if (i % 2 == 0) "09:00" else "18:00",
                 items = emptyList(),
                 status = s.status,
                 painBefore = s.before,
@@ -137,7 +134,7 @@ object ReportSample {
     suspend fun upload(repo: HealthLogRepository, patientId: String, today: LocalDate = ANCHOR) {
         val r = records(today)
         r.checkIns.forEach { repo.saveCheckIn(patientId, it) }
-        r.sessions.forEach { repo.saveSession(patientId, it) }
+        r.sessions.forEach { repo.saveSession(patientId, it.copy(patientId = patientId)) }
         r.peg.forEach { repo.savePeg(patientId, it) }
     }
 }
