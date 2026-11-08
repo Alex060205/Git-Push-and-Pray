@@ -5,8 +5,10 @@ import android.util.Log
 import androidx.activity.ComponentActivity
 import androidx.activity.compose.setContent
 import androidx.activity.enableEdgeToEdge
+import androidx.compose.foundation.layout.Column
 import androidx.compose.foundation.layout.fillMaxSize
 import androidx.compose.foundation.layout.padding
+import androidx.compose.material3.Button
 import androidx.compose.material3.Scaffold
 import androidx.compose.material3.Text
 import androidx.compose.runtime.Composable
@@ -16,12 +18,16 @@ import androidx.compose.runtime.setValue
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.tooling.preview.Preview
 import androidx.lifecycle.lifecycleScope
+import com.example.vitala.Recognition.PrescriptionScreen
 import com.example.vitala.data.GoogleWeatherService
+import com.example.vitala.data.Patient
+import com.example.vitala.data.Repositories.PatientRepository
 import com.example.vitala.ui.theme.VitalaTheme
 import com.google.firebase.Firebase
 import com.google.firebase.ai.ai
 import com.google.firebase.ai.type.GenerativeBackend
 import kotlinx.coroutines.launch
+import java.time.LocalDate
 
 class MainActivity : ComponentActivity() {
 
@@ -36,20 +42,37 @@ class MainActivity : ComponentActivity() {
 
 //        AppContainer.init()   // loads demo data
 //        testGemini()
-        testWeather()
+//        testWeather()
 
+        val db = PatientRepository()
         setContent {
             VitalaTheme {
-                Scaffold(modifier = Modifier.fillMaxSize()) { innerPadding ->
-                    Greeting(
-                        message = weatherText,
-                        modifier = Modifier.padding(innerPadding)
-                    )
-                }
+                PrescriptionScreen()
+//                Column {
+//                    Button(onClick = {
+//                        try {
+//                            val patient = Patient(
+//                                name = "John Doe",
+//                                birthDate = "1990-01-01",
+//                                gender = "Male",
+//                                heightCm = 170.0,
+//                                weightKg = 70.0,
+//                                affectedJoints = listOf("Left knee", "Right knee")
+//                            )
+//                            db.savePatient(patient)
+//                            Log.d("FirestoreTest", "Patient saved successfully")
+//                        } catch (e: Exception) {
+//                            Log.e("FirestoreTest", "Failed to save patient", e)
+//                        }
+//                    }) {
+//                        Text("Save Patient")
+//                    }
+//                }
             }
         }
     }
-
+}
+/*
     /** Temporary: calls the Google Weather API once and shows the result on screen. */
     private fun testWeather() {
         val weatherService = GoogleWeatherService(BuildConfig.WEATHER_API_KEY)
@@ -101,3 +124,4 @@ fun GreetingPreview() {
         Greeting("Hello preview!")
     }
 }
+*/
