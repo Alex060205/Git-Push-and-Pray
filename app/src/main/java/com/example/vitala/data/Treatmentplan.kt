@@ -1,5 +1,6 @@
 package com.example.vitala.data
 
+import com.google.firebase.firestore.DocumentId
 import java.time.LocalDate
 import java.util.UUID
 
@@ -14,7 +15,7 @@ import java.util.UUID
  * @constructor Creates a new treatment plan object with the given parameters
  */
 data class TreatmentPlan(
-    val id: String = UUID.randomUUID().toString(),
+    @DocumentId val id: String = UUID.randomUUID().toString(),
     val physicianName: String = "",
     val createdOn: LocalDate = LocalDate.now(),
     val exercises: List<PrescribedExercise> = emptyList(),
