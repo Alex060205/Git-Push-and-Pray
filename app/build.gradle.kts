@@ -22,6 +22,7 @@ android {
         testInstrumentationRunner = "androidx.test.runner.AndroidJUnitRunner"
         val props = Properties().apply { rootProject.file("local.properties").inputStream().use { load(it) } }
         buildConfigField("String", "WEATHER_API_KEY", "\"${props.getProperty("WEATHER_API_KEY", "")}\"")
+        buildConfigField("String", "GEMINI_API_KEY", "\"${props.getProperty("GEMINI_API_KEY", "")}\"")
 
     }
 
@@ -52,7 +53,6 @@ dependencies {
     implementation(libs.androidx.core.ktx)
     implementation(libs.androidx.lifecycle.runtime.ktx)
     implementation(platform("com.google.firebase:firebase-bom:34.17.0"))
-    implementation("com.google.firebase:firebase-ai")
     implementation("com.google.firebase:firebase-firestore")
     testImplementation(libs.junit)
     androidTestImplementation(platform(libs.androidx.compose.bom))
@@ -61,4 +61,12 @@ dependencies {
     androidTestImplementation(libs.androidx.junit)
     debugImplementation(libs.androidx.compose.ui.test.manifest)
     debugImplementation(libs.androidx.compose.ui.tooling)
+// Managed by the Firebase BoM above (no explicit version required)
+    implementation("com.google.firebase:firebase-ai")
+
+// AndroidX Support & Compose Libraries
+    implementation("androidx.exifinterface:exifinterface:1.4.2")
+    implementation("androidx.lifecycle:lifecycle-viewmodel-compose:2.11.0")
+    implementation("androidx.activity:activity-compose:1.13.0")
+
 }

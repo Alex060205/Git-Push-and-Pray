@@ -11,11 +11,9 @@ enum class Mood { BAD, OKAY, GOOD }
 enum class Nutrition { POOR, OKAY, GOOD }
 
 /** The three choices the patient picks from each day. */
-enum class Intensity { REST, GENTLE, FULL }
+enum class Intensity { REST, GENTLE, FULL}
 
-/** CUT_SHORT = started but stopped before the end. */
-enum class SessionStatus { PLANNED, DONE, CUT_SHORT, SKIPPED }
-
+enum class SessionStatus { PLANNED, DONE, OVERDONE, CUT_SHORT, SKIPPED }
 enum class DoseStatus { PENDING, TAKEN, SKIPPED, SNOOZED }
 
 /** SCHEDULED = fixed times; AS_NEEDED = "only when pain is high". */

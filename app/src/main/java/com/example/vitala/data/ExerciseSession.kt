@@ -18,7 +18,8 @@ import java.util.UUID
  * @param painBefore Pain before starting
  * @param painDuring Pain during the exercise
  * @param painAfter Pain after the exercise
- * @param symptomResponse Asked right after the session (DONE or CUT_SHORT)
+ * @param symptomResponse Asked right after the session (DONE, OVERDONE or CUT_SHORT):
+ *                        how it felt compared with what the doctor's description led them to expect
  * @param stopReason Why it was skipped or cut short
  */
 data class ExerciseSession(
@@ -42,6 +43,10 @@ data class ExerciseSession(
     @get:Exclude
     val localTime: LocalTime get() = LocalTime.parse(scheduledTime)
 
+    /** Items finished so far. Recomputed on each read; not stored in Firestore. */
+    @get:Exclude
+    val itemsCompleted: List<ExerciseItem> get() = items.filter { it.status == SessionStatus.DONE }
+
     /** Records pain before starting. Status stays PLANNED until the session ends. */
     fun recordPainBefore(before: PainFeeling) {
         this.painBefore = before
@@ -55,6 +60,20 @@ data class ExerciseSession(
      */
     fun markDone(during: PainFeeling, after: PainFeeling, symptoms: SymptomResponse? = null) {
         this.status = SessionStatus.DONE
+        this.painDuring = during
+        this.painAfter = after
+        this.symptomResponse = symptoms
+        this.stopReason = null
+    }
+
+    /**
+     * Marks the exercise as done, but more than prescribed.
+     * @param during Pain level during the exercise
+     * @param after Pain level after the exercise
+     * @param symptoms Symptom response asked right after the session
+     */
+    fun markOverdone(during: PainFeeling, after: PainFeeling, symptoms: SymptomResponse? = null) {
+        this.status = SessionStatus.OVERDONE
         this.painDuring = during
         this.painAfter = after
         this.symptomResponse = symptoms

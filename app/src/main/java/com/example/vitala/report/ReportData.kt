@@ -13,9 +13,9 @@ import java.time.LocalDate
 
 /** One rating for one day, 0-10. */
 data class DailyRating(val date: LocalDate, val value: Int)
-
 enum class SessionResult(val label: String) {
-    FINISHED("Finished"), CUT_SHORT("Cut short"), SKIPPED("Skipped"), NO_RECORD("No result recorded")
+    FINISHED("Finished"), OVERDONE("Did more than planned"), CUT_SHORT("Cut short"),
+    SKIPPED("Skipped"), NO_RECORD("No result recorded")
 }
 
 data class SessionRow(
@@ -26,8 +26,9 @@ data class SessionRow(
 ) {
     val reason: StopReason? get() = session.stopReason
     val symptoms: SymptomResponse? get() = session.symptomResponse
-    val incomplete get() = result != SessionResult.FINISHED
-    val attempted get() = result == SessionResult.FINISHED || result == SessionResult.CUT_SHORT
+    val incomplete get() = result != SessionResult.FINISHED && result != SessionResult.OVERDONE
+    val attempted get() = result == SessionResult.FINISHED || result == SessionResult.OVERDONE ||
+            result == SessionResult.CUT_SHORT
 }
 
 /** Everything that goes in the doctor report. Nothing here is a clinical conclusion. */
@@ -48,7 +49,9 @@ data class ReportData(
     val sampleNotes: List<String> = emptyList()
 ) {
     val weekFrom: LocalDate get() = to.minusDays(6)
-    val finishedSessions get() = sessions.count { it.result == SessionResult.FINISHED }
+    val finishedSessions get() = sessions.count {
+        it.result == SessionResult.FINISHED || it.result == SessionResult.OVERDONE
+    }
     val recordedSessions get() = sessions.count { it.result != SessionResult.NO_RECORD }
     val incomplete get() = sessions.filter { it.result == SessionResult.SKIPPED || it.result == SessionResult.CUT_SHORT }
 
@@ -84,6 +87,7 @@ data class ReportData(
                 .map { s ->
                     val result = when (s.status) {
                         SessionStatus.DONE -> SessionResult.FINISHED
+                        SessionStatus.OVERDONE -> SessionResult.OVERDONE
                         SessionStatus.CUT_SHORT -> SessionResult.CUT_SHORT
                         SessionStatus.SKIPPED -> SessionResult.SKIPPED
                         SessionStatus.PLANNED -> SessionResult.NO_RECORD
