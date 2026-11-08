@@ -9,6 +9,10 @@ import androidx.core.content.FileProvider
 import androidx.lifecycle.AndroidViewModel
 import androidx.lifecycle.SavedStateHandle
 import androidx.lifecycle.viewModelScope
+import com.example.vitala.pacing.integration.AdaptiveProgramService
+import com.example.vitala.pacing.integration.AdaptiveRepository
+import com.example.vitala.pacing.integration.Evaluation
+import com.example.vitala.pacing.integration.PreparedProgram
 import kotlinx.coroutines.CancellationException
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.flow.MutableStateFlow
@@ -18,23 +22,40 @@ import kotlinx.coroutines.flow.update
 import kotlinx.coroutines.launch
 import kotlinx.coroutines.withContext
 import java.io.File
+import java.time.LocalDate
+import java.util.UUID
 
-/** One photographed page: the file on disk plus a small bitmap for the strip. */
-data class ScanPage(val path: String, val thumbnail: Bitmap)
+data class ScanPage(
+    val path: String,
+    val thumbnail: Bitmap
+)
 
 data class ScanUiState(
-    val pages: List<ScanPage> = emptyList(), // photos collected, not yet sent
-    val preview: Bitmap? = null,          // page 1 of a PDF
-    val previewCaption: String? = null,   // e.g. "Page 1 of 3"
-    val sourceText: String? = null,       // original text of a .txt prescription
+    val pages: List<ScanPage> = emptyList(),
+    val preview: Bitmap? = null,
+    val previewCaption: String? = null,
+    val sourceText: String? = null,
     val prescription: ExercisePrescription? = null,
+
+    val preparedProgram: PreparedProgram? = null,
+    val activeProgramId: String? = null,
+    val activePatientId: String? = null,
+
+    val evaluations: Map<String, Evaluation> = emptyMap(),
+
     val isAnalyzing: Boolean = false,
+    val isWorking: Boolean = false,
+
+    val status: String? = null,
     val error: String? = null
 ) {
-    val canAddPages get() = !isAnalyzing && pages.size < MAX_PAGES
+    val busy: Boolean
+        get() = isAnalyzing || isWorking
+
+    val canAddPages: Boolean
+        get() = !busy && pages.size < MAX_PAGES
 
     companion object {
-        /** Keeps the request size and memory use reasonable. */
         const val MAX_PAGES = 10
     }
 }
@@ -46,206 +67,674 @@ class PrescriptionViewModel(
 
     private val extractor = PrescriptionExtractor()
 
-    private val _state = MutableStateFlow(ScanUiState())
-    val state: StateFlow<ScanUiState> = _state.asStateFlow()
+    private val programs =
+        AdaptiveProgramService(extractor)
+
+    private val repository by lazy {
+        AdaptiveRepository()
+    }
+
+    private val _state =
+        MutableStateFlow(ScanUiState())
+
+    val state: StateFlow<ScanUiState> =
+        _state.asStateFlow()
 
     init {
-        // Android may kill the process while the camera app is open; bring back
-        // the pages taken so far.
-        val saved = savedState.get<ArrayList<String>>(KEY_PAGES).orEmpty()
-        if (saved.isNotEmpty()) viewModelScope.launch { addPages(saved.map(::File), persist = false) }
+        val saved = savedState
+            .get<ArrayList<String>>(KEY_PAGES)
+            .orEmpty()
+
+        if (saved.isNotEmpty()) {
+            viewModelScope.launch {
+                addPages(
+                    files = saved.map(::File),
+                    persist = false
+                )
+            }
+        }
     }
 
-    // ---------- camera ----------
+    // ---------- Camera ----------
 
-    /**
-     * Creates an empty file in app-private storage (filesDir/photos) and
-     * returns a content:// URI the camera app is allowed to write into.
-     *
-     * The path is kept in SavedStateHandle because Android may kill this
-     * process while the camera app is in front; a plain field would be lost.
-     */
     fun createPhotoUri(): Uri {
+        check(!_state.value.busy) {
+            "Wait for the current operation"
+        }
+
         val app = getApplication<Application>()
-        val dir = File(app.filesDir, DIR_PHOTOS).apply { mkdirs() }
-        val file = File(dir, "rx_${System.currentTimeMillis()}.jpg")
-        savedState[KEY_PENDING_PHOTO] = file.absolutePath
-        return FileProvider.getUriForFile(app, "${app.packageName}.fileprovider", file)
+
+        val folder = File(
+            app.filesDir,
+            DIR_PHOTOS
+        ).apply {
+            mkdirs()
+        }
+
+        val file = File(
+            folder,
+            "rx_${UUID.randomUUID()}.jpg"
+        )
+
+        savedState[KEY_PENDING_PHOTO] =
+            file.absolutePath
+
+        return FileProvider.getUriForFile(
+            app,
+            "${app.packageName}.fileprovider",
+            file
+        )
     }
 
-    /** Called with the camera result. success = false means the user backed out. */
     fun onPhotoResult(success: Boolean) {
-        val path = savedState.get<String>(KEY_PENDING_PHOTO) ?: return
-        savedState.remove<String>(KEY_PENDING_PHOTO)
+        val path = savedState.get<String>(
+            KEY_PENDING_PHOTO
+        ) ?: return
+
+        savedState.remove<String>(
+            KEY_PENDING_PHOTO
+        )
+
         val file = File(path)
-        if (!success || !file.exists() || file.length() == 0L) {
-            file.delete() // don't leave empty files behind
+
+        if (
+            !success ||
+            !file.exists() ||
+            file.length() == 0L
+        ) {
+            file.delete()
             return
         }
-        viewModelScope.launch { addPages(listOf(file)) }
+
+        databaseWork {
+            addPages(listOf(file))
+        }
     }
 
     fun onCameraUnavailable() {
         onPhotoResult(false)
-        _state.update { it.copy(error = "No camera app available on this device") }
+
+        _state.update {
+            it.copy(
+                error = "No camera app available"
+            )
+        }
     }
 
-    // ---------- photo picker ----------
+    // ---------- Image picker ----------
 
-    /** Called with the photo picker result. Empty list = the user cancelled. */
     fun onImagesPicked(uris: List<Uri>) {
         if (uris.isEmpty()) return
-        viewModelScope.launch {
-            val room = ScanUiState.MAX_PAGES - _state.value.pages.size
-            val files = try {
-                uris.take(room).map { copyToPrivateStorage(it, DIR_PHOTOS) }
-            } catch (e: Exception) {
-                Log.e(TAG, "Could not copy picked images", e)
-                _state.update { it.copy(error = e.message ?: "Could not open the selected images") }
-                return@launch
-            }
+
+        databaseWork {
+            val room = ScanUiState.MAX_PAGES -
+                    _state.value.pages.size
+
+            val files = uris
+                .take(room)
+                .map {
+                    copyToPrivateStorage(
+                        it,
+                        DIR_PHOTOS
+                    )
+                }
+
             addPages(files)
+
             if (uris.size > room) {
                 _state.update {
-                    it.copy(error = "Only ${ScanUiState.MAX_PAGES} pages fit in one scan; " +
-                            "${uris.size - room} not added.")
+                    it.copy(
+                        error =
+                            "Only ${ScanUiState.MAX_PAGES} " +
+                                    "pages are supported"
+                    )
                 }
             }
         }
     }
 
-    // ---------- pages ----------
+    // ---------- Page management ----------
 
     fun removePage(path: String) {
+        if (_state.value.busy) return
+
         File(path).delete()
-        _state.update { s -> s.copy(pages = s.pages.filterNot { it.path == path }) }
+
+        _state.update {
+            it.copy(
+                pages = it.pages.filterNot { page ->
+                    page.path == path
+                },
+                prescription = null,
+                preparedProgram = null,
+                activeProgramId = null,
+                activePatientId = null,
+                evaluations = emptyMap(),
+                status = null,
+                error = null
+            )
+        }
+
         persistPages()
     }
 
     fun clearPages() {
-        _state.value.pages.forEach { File(it.path).delete() }
-        _state.update { it.copy(pages = emptyList(), prescription = null, error = null) }
+        if (_state.value.busy) return
+
+        _state.value.pages.forEach {
+            File(it.path).delete()
+        }
+
+        _state.value = ScanUiState()
         persistPages()
     }
 
-    /** Sends every collected page to Gemini in one request. */
-    fun analyzePages() {
-        val pages = _state.value.pages
-        if (pages.isEmpty() || _state.value.isAnalyzing) return
-        launchAnalysis(keepPages = true) {
-            val jpegs = pages.map { loadAsJpeg(File(it.path)) }
-            val rx = extractor.extractPhotos(jpegs)
-            _state.update { it.copy(prescription = rx, isAnalyzing = false) }
-        }
-    }
-
-    private suspend fun addPages(files: List<File>, persist: Boolean = true) {
-        val added = files.mapNotNull { file ->
-            try {
-                ScanPage(file.absolutePath, loadScaledBitmap(file, THUMBNAIL_SIDE))
-            } catch (e: Exception) {
-                Log.e(TAG, "Could not read photo ${file.name}", e)
-                file.delete()
-                null
+    private suspend fun addPages(
+        files: List<File>,
+        persist: Boolean = true
+    ) {
+        val added = withContext(Dispatchers.IO) {
+            files.map { file ->
+                ScanPage(
+                    path = file.absolutePath,
+                    thumbnail = loadScaledBitmap(
+                        file,
+                        THUMBNAIL_SIDE
+                    )
+                )
             }
         }
-        _state.update { s ->
-            s.copy(
-                // A new page means any earlier result or document is out of date.
-                pages = (s.pages + added).take(ScanUiState.MAX_PAGES),
-                preview = null, previewCaption = null, sourceText = null,
+
+        _state.update {
+            it.copy(
+                pages = (it.pages + added)
+                    .take(ScanUiState.MAX_PAGES),
+
+                preview = null,
+                previewCaption = null,
+                sourceText = null,
+
                 prescription = null,
-                error = if (added.size < files.size) "Some photos could not be read" else null
+                preparedProgram = null,
+                activeProgramId = null,
+                activePatientId = null,
+                evaluations = emptyMap(),
+
+                status = null,
+                error = null
             )
         }
-        if (persist) persistPages()
+
+        if (persist) {
+            persistPages()
+        }
     }
 
     private fun persistPages() {
-        savedState[KEY_PAGES] = ArrayList(_state.value.pages.map { it.path })
+        savedState[KEY_PAGES] = ArrayList(
+            _state.value.pages.map { it.path }
+        )
     }
 
-    // ---------- file picker (PDF / text) ----------
+    // ---------- Prescription extraction ----------
 
-    /**
-     * Called with the file picker result. PDFs go to Gemini as PDFs and text
-     * goes as text, so nothing is lost converting them to an image.
-     */
-    fun onDocumentPicked(uri: Uri?) {
-        if (uri == null) return
-        clearPages() // a document is its own scan, not one more page
-        launchAnalysis {
-            val mime = getApplication<Application>().contentResolver.getType(uri)
-            val file = copyToPrivateStorage(uri, DIR_DOCUMENTS)
-            val rx = when {
-                mime == "application/pdf" -> {
-                    require(file.length() <= MAX_INLINE_BYTES) {
-                        "PDF is too large (${file.length() / 1_000_000} MB). Limit is " +
-                                "${MAX_INLINE_BYTES / 1_000_000} MB."
-                    }
-                    // Preview is only for checking; if it fails, still analyse.
-                    val preview = runCatching { renderPdfFirstPage(file) }.getOrNull()
-                    _state.value = ScanUiState(
-                        preview = preview?.first,
-                        previewCaption = preview?.let { "Page 1 of ${it.second}" },
-                        isAnalyzing = true
-                    )
-                    extractor.extractPdf(withContext(Dispatchers.IO) { file.readBytes() })
-                }
-                mime?.startsWith("text/") == true -> {
-                    val text = withContext(Dispatchers.IO) { file.readText() }
-                    require(text.isNotBlank()) { "The text file is empty" }
-                    _state.value = ScanUiState(sourceText = text, isAnalyzing = true)
-                    extractor.extractText(text)
-                }
-                else -> {
-                    file.delete()
-                    throw IllegalArgumentException("Unsupported file type: ${mime ?: "unknown"}")
+    fun analyzePages() {
+        val pages = _state.value.pages
+        if (pages.isEmpty()) return
+
+        launchAnalysis(keepPages = true) {
+            val images = withContext(Dispatchers.IO) {
+                pages.map {
+                    loadAsJpeg(File(it.path))
                 }
             }
-            _state.update { it.copy(prescription = rx, isAnalyzing = false) }
+
+            val prescription =
+                extractor.extractPhotos(images)
+
+            acceptExtracted(prescription)
         }
     }
 
-    // ---------- shared ----------
-
-    /** Runs one analysis with a single place for error handling. */
-    private fun launchAnalysis(keepPages: Boolean = false, work: suspend () -> Unit) {
-        _state.update {
-            if (keepPages) it.copy(isAnalyzing = true, prescription = null, error = null)
-            else ScanUiState(isAnalyzing = true)
+    fun onDocumentPicked(uri: Uri?) {
+        if (uri == null || _state.value.busy) {
+            return
         }
+
+        clearPages()
+
+        launchAnalysis {
+            val mime = getApplication<Application>()
+                .contentResolver
+                .getType(uri)
+
+            val file = copyToPrivateStorage(
+                uri,
+                DIR_DOCUMENTS
+            )
+
+            require(
+                file.length() <= MAX_INLINE_BYTES
+            ) {
+                "Document exceeds 15 MB"
+            }
+
+            val prescription = when {
+                mime == "application/pdf" -> {
+                    val preview = withContext(
+                        Dispatchers.IO
+                    ) {
+                        runCatching {
+                            renderPdfFirstPage(file)
+                        }.getOrNull()
+                    }
+
+                    _state.update {
+                        it.copy(
+                            preview = preview?.first,
+                            previewCaption =
+                                preview?.let { value ->
+                                    "Page 1 of ${value.second}"
+                                }
+                        )
+                    }
+
+                    val bytes = withContext(
+                        Dispatchers.IO
+                    ) {
+                        file.readBytes()
+                    }
+
+                    extractor.extractPdf(bytes)
+                }
+
+                mime?.startsWith("text/") == true -> {
+                    val text = withContext(
+                        Dispatchers.IO
+                    ) {
+                        file.readText()
+                    }
+
+                    require(text.isNotBlank()) {
+                        "The text file is empty"
+                    }
+
+                    _state.update {
+                        it.copy(sourceText = text)
+                    }
+
+                    extractor.extractText(text)
+                }
+
+                else -> {
+                    error(
+                        "Unsupported document type: $mime"
+                    )
+                }
+            }
+
+            acceptExtracted(prescription)
+        }
+    }
+
+    private suspend fun acceptExtracted(
+        prescription: ExercisePrescription
+    ) {
+        // Keep the original extraction visible
+        // if conversion fails.
+        _state.update {
+            it.copy(
+                prescription = prescription,
+                status = "Preparing exercise plan"
+            )
+        }
+
+        val prepared = programs.prepare(
+            prescription
+        )
+
+        _state.update {
+            it.copy(
+                preparedProgram = prepared,
+                status =
+                    "Prescription ready to review and activate"
+            )
+        }
+    }
+
+    // ---------- Program persistence ----------
+
+    fun activateProgram(
+        patientId: String
+    ) = databaseWork {
+        val prepared = requireNotNull(
+            _state.value.preparedProgram
+        ) {
+            "Read and configure a prescription first"
+        }
+
+        repository.activate(
+            patientId,
+            prepared
+        )
+
+        _state.update {
+            it.copy(
+                activePatientId = patientId,
+                activeProgramId = prepared.id,
+                evaluations = emptyMap(),
+                status = "Program saved"
+            )
+        }
+    }
+
+    fun loadProgram(
+        patientId: String,
+        programId: String
+    ) = databaseWork {
+        val prepared = repository.loadProgram(
+            patientId,
+            programId
+        )
+
+        _state.value = ScanUiState(
+            prescription = prepared.source,
+            preparedProgram = prepared,
+            activePatientId = patientId,
+            activeProgramId = programId,
+            isWorking = true,
+            status = "Program loaded"
+        )
+    }
+
+    // ---------- Patient check-in ----------
+
+    fun saveCheckIn(
+        exerciseId: String,
+        pain: Int,
+        answers: Map<String, Boolean>
+    ) {
+        val capturedAnswers = answers.toMap()
+
+        databaseWork {
+            val (patientId, programId) =
+                activeContext(exerciseId)
+
+            val today = LocalDate.now()
+
+            // Discard the previous evaluation
+            // before changing its inputs.
+            _state.update {
+                it.copy(
+                    evaluations =
+                        it.evaluations - exerciseId
+                )
+            }
+
+            repository.saveCheckIn(
+                patientId = patientId,
+                programId = programId,
+                exerciseId = exerciseId,
+                date = today,
+                pain = pain,
+                answers = capturedAnswers
+            )
+
+            val evaluation = repository.evaluate(
+                patientId = patientId,
+                programId = programId,
+                exerciseId = exerciseId,
+                today = today
+            )
+
+            _state.update {
+                it.copy(
+                    evaluations = it.evaluations +
+                            (exerciseId to evaluation),
+
+                    status = "Recommendation ready"
+                )
+            }
+        }
+    }
+
+    fun evaluateExercise(
+        exerciseId: String
+    ) = databaseWork {
+        val (patientId, programId) =
+            activeContext(exerciseId)
+
+        val evaluation = repository.evaluate(
+            patientId,
+            programId,
+            exerciseId,
+            LocalDate.now()
+        )
+
+        _state.update {
+            it.copy(
+                evaluations = it.evaluations +
+                        (exerciseId to evaluation),
+
+                status = "Recommendation ready"
+            )
+        }
+    }
+
+    // ---------- Accept today's assignment ----------
+
+    fun applyAssignment(
+        exerciseId: String
+    ) = databaseWork {
+        val (patientId, programId) =
+            activeContext(exerciseId)
+
+        val evaluation = requireNotNull(
+            _state.value.evaluations[exerciseId]
+        ) {
+            "Get a current recommendation first"
+        }
+
+        require(
+            evaluation.programId == programId
+        )
+
+        val applied = repository.applyAssignment(
+            patientId,
+            evaluation
+        )
+
+        _state.update {
+            it.copy(
+                status = if (applied) {
+                    "Today's assignment saved"
+                } else {
+                    "Today's assignment was already saved"
+                }
+            )
+        }
+    }
+
+    // ---------- Record actual exercise ----------
+
+    fun recordSession(
+        exerciseId: String,
+        actualValue: Double?,
+        missed: Boolean
+    ) = databaseWork {
+        val (patientId, programId) =
+            activeContext(exerciseId)
+
+        repository.recordSession(
+            patientId = patientId,
+            programId = programId,
+            exerciseId = exerciseId,
+            date = LocalDate.now(),
+            actualValue = actualValue,
+            missed = missed
+        )
+
+        _state.update {
+            it.copy(
+                evaluations =
+                    it.evaluations - exerciseId,
+
+                status = "Session recorded"
+            )
+        }
+    }
+
+    // ---------- Shared helpers ----------
+
+    private fun activeContext(
+        exerciseId: String
+    ): Pair<String, String> {
+        val current = _state.value
+
+        val patientId = requireNotNull(
+            current.activePatientId
+        ) {
+            "Select and activate a patient program first"
+        }
+
+        val programId = requireNotNull(
+            current.activeProgramId
+        ) {
+            "Activate the program first"
+        }
+
+        require(
+            current.preparedProgram
+                ?.exercises
+                ?.any {
+                    it.plan.exerciseId == exerciseId
+                } == true
+        ) {
+            "This exercise does not belong to the active program"
+        }
+
+        return patientId to programId
+    }
+
+    private fun databaseWork(
+        work: suspend () -> Unit
+    ) {
+        if (_state.value.busy) return
+
+        _state.update {
+            it.copy(
+                isWorking = true,
+                error = null
+            )
+        }
+
         viewModelScope.launch {
             try {
                 work()
-            } catch (e: CancellationException) {
-                throw e // let the coroutine cancel normally
-            } catch (e: Exception) {
-                Log.e(TAG, "Prescription analysis failed", e)
+            } catch (exception: CancellationException) {
+                throw exception
+            } catch (exception: Exception) {
+                Log.e(
+                    TAG,
+                    "Operation failed",
+                    exception
+                )
+
                 _state.update {
-                    it.copy(isAnalyzing = false, error = e.message ?: "Analysis failed")
+                    it.copy(
+                        error = exception.message
+                            ?: "Operation failed"
+                    )
+                }
+            } finally {
+                _state.update {
+                    it.copy(isWorking = false)
                 }
             }
         }
     }
 
-    /**
-     * Copies a picked file into filesDir/<dir>. Read access to a picker URI is
-     * temporary, and this keeps every prescription in one private place.
-     */
-    private suspend fun copyToPrivateStorage(uri: Uri, dir: String): File =
-        withContext(Dispatchers.IO) {
-            val app = getApplication<Application>()
-            val ext = app.contentResolver.getType(uri)
-                ?.let { MimeTypeMap.getSingleton().getExtensionFromMimeType(it) }
-                ?: "bin"
-            val folder = File(app.filesDir, dir).apply { mkdirs() }
-            val file = File(folder, "rx_${System.currentTimeMillis()}_${java.util.UUID.randomUUID()}.$ext")
-            val input = app.contentResolver.openInputStream(uri)
-                ?: throw IllegalStateException("Could not open the selected file")
-            input.use { src -> file.outputStream().use { dst -> src.copyTo(dst) } }
-            file
+    private fun launchAnalysis(
+        keepPages: Boolean = false,
+        work: suspend () -> Unit
+    ) {
+        if (_state.value.busy) return
+
+        _state.update {
+            ScanUiState(
+                pages = if (keepPages) {
+                    it.pages
+                } else {
+                    emptyList()
+                },
+                isAnalyzing = true
+            )
         }
+
+        viewModelScope.launch {
+            try {
+                work()
+            } catch (exception: CancellationException) {
+                throw exception
+            } catch (exception: Exception) {
+                Log.e(
+                    TAG,
+                    "Prescription processing failed",
+                    exception
+                )
+
+                _state.update {
+                    it.copy(
+                        error = exception.message
+                            ?: "Prescription processing failed"
+                    )
+                }
+            } finally {
+                _state.update {
+                    it.copy(isAnalyzing = false)
+                }
+            }
+        }
+    }
+
+    private suspend fun copyToPrivateStorage(
+        uri: Uri,
+        directory: String
+    ): File = withContext(Dispatchers.IO) {
+        val app = getApplication<Application>()
+
+        val extension = app.contentResolver
+            .getType(uri)
+            ?.let {
+                MimeTypeMap.getSingleton()
+                    .getExtensionFromMimeType(it)
+            }
+            ?: "bin"
+
+        val folder = File(
+            app.filesDir,
+            directory
+        ).apply {
+            mkdirs()
+        }
+
+        val file = File(
+            folder,
+            "rx_${UUID.randomUUID()}.$extension"
+        )
+
+        val input = app.contentResolver
+            .openInputStream(uri)
+            ?: error("Could not open selected file")
+
+        input.use { source ->
+            file.outputStream().use { target ->
+                source.copyTo(target)
+            }
+        }
+
+        file
+    }
 
     private companion object {
         const val TAG = "PrescriptionViewModel"
@@ -254,12 +743,6 @@ class PrescriptionViewModel(
         const val THUMBNAIL_SIDE = 400
         const val DIR_PHOTOS = "photos"
         const val DIR_DOCUMENTS = "documents"
-
-        /**
-         * Inline files count toward Gemini's per-request size limit (about 20 MB,
-         * check current docs). 15 MB leaves room for base64 overhead and the prompt.
-         * A one- or two-page prescription PDF is normally well under 1 MB.
-         */
         const val MAX_INLINE_BYTES = 15_000_000L
     }
 }
