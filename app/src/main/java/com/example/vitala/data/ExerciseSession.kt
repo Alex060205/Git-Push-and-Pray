@@ -7,6 +7,9 @@ import java.time.LocalDate
 import java.time.LocalTime
 import java.util.UUID
 
+/**
+ * One exercise session: what was planned and how it went.
+ */
 data class ExerciseSession(
     @DocumentId val id: String = UUID.randomUUID().toString(),
     val patientId: String = "",
@@ -17,12 +20,8 @@ data class ExerciseSession(
     var painBefore: PainFeeling? = null,
     var painDuring: PainFeeling? = null,
     var painAfter: PainFeeling? = null,
-
-    // Structured answers used by main's reports and Firebase mapping.
     var symptomResponse: SymptomResponse? = null,
     var stopReason: StopReason? = null,
-
-    // Original text retained for compatibility with Shen's methods.
     var why: String = "",
     var symptomResponseText: String = ""
 ) {
@@ -35,17 +34,23 @@ data class ExerciseSession(
     val localTime: LocalTime
         get() = LocalTime.parse(scheduledTime)
 
+    // Current name used by main.
     @get:Exclude
-    val items_completed: List<ExerciseItem>
+    val itemsCompleted: List<ExerciseItem>
         get() = items.filter {
             it.status == SessionStatus.DONE
         }
+
+    // Compatibility with existing callers.
+    @get:Exclude
+    val items_completed: List<ExerciseItem>
+        get() = itemsCompleted
 
     fun recordPainBefore(before: PainFeeling) {
         painBefore = before
     }
 
-    // Main's signature.
+    // Structured signature used by main.
     fun markDone(
         during: PainFeeling,
         after: PainFeeling,
@@ -55,12 +60,12 @@ data class ExerciseSession(
         painDuring = during
         painAfter = after
         symptomResponse = symptoms
-        symptomResponseText = ""
         stopReason = null
         why = ""
+        symptomResponseText = ""
     }
 
-    // Shen's signature.
+    // Compatibility with Shen's signature.
     fun markDone(
         before: PainFeeling,
         during: PainFeeling,
@@ -77,6 +82,41 @@ data class ExerciseSession(
         symptomResponseText = symptomResponse
     }
 
+    // Structured signature used by main.
+    fun markOverdone(
+        during: PainFeeling,
+        after: PainFeeling,
+        symptoms: SymptomResponse? = null
+    ) {
+        status = SessionStatus.OVERDONE
+        painDuring = during
+        painAfter = after
+        symptomResponse = symptoms
+        stopReason = null
+        why = ""
+        symptomResponseText = ""
+    }
+
+    // Compatibility with Shen's signature.
+    fun markOverdone(
+        before: PainFeeling,
+        during: PainFeeling,
+        after: PainFeeling,
+        symptomResponse: String = "",
+        why: String = ""
+    ) {
+        markOverdone(
+            during = during,
+            after = after,
+            symptoms = parseSymptoms(symptomResponse)
+        )
+
+        painBefore = before
+        symptomResponseText = symptomResponse
+        stopReason = parseReason(why)
+        this.why = why
+    }
+
     fun markCutShort(
         reason: StopReason,
         during: PainFeeling,
@@ -87,23 +127,23 @@ data class ExerciseSession(
         painDuring = during
         painAfter = after
         symptomResponse = symptoms
-        symptomResponseText = ""
         stopReason = reason
         why = ""
+        symptomResponseText = ""
     }
 
-    // Main's signature.
+    // Structured signature used by main.
     fun markSkipped(reason: StopReason? = null) {
         status = SessionStatus.SKIPPED
         stopReason = reason
         painDuring = null
         painAfter = null
         symptomResponse = null
-        symptomResponseText = ""
         why = ""
+        symptomResponseText = ""
     }
 
-    // Shen's signature.
+    // Compatibility with Shen's signature.
     fun markSkipped(
         before: PainFeeling,
         why: String = ""
@@ -130,23 +170,6 @@ data class ExerciseSession(
         this.why = why
     }
 
-    fun markOverdone(
-        before: PainFeeling,
-        during: PainFeeling,
-        after: PainFeeling,
-        symptomResponse: String = "",
-        why: String = ""
-    ) {
-        status = SessionStatus.OVERDONE
-        painBefore = before
-        painDuring = during
-        painAfter = after
-        this.symptomResponse = parseSymptoms(symptomResponse)
-        symptomResponseText = symptomResponse
-        stopReason = parseReason(why)
-        this.why = why
-    }
-
     fun start(
         scope: CoroutineScope,
         onTick: (ExerciseItem, Long) -> Unit = { _, _ -> }
@@ -167,28 +190,22 @@ data class ExerciseSession(
     private fun parseSymptoms(
         text: String
     ): SymptomResponse? {
+        val normalized = text.trim()
+
         return SymptomResponse.values().firstOrNull {
-            it.name.equals(
-                text.trim(),
-                ignoreCase = true
-            ) || it.label.equals(
-                text.trim(),
-                ignoreCase = true
-            )
+            it.name.equals(normalized, ignoreCase = true) ||
+                    it.label.equals(normalized, ignoreCase = true)
         }
     }
 
     private fun parseReason(
         text: String
     ): StopReason? {
+        val normalized = text.trim()
+
         return StopReason.values().firstOrNull {
-            it.name.equals(
-                text.trim(),
-                ignoreCase = true
-            ) || it.label.equals(
-                text.trim(),
-                ignoreCase = true
-            )
+            it.name.equals(normalized, ignoreCase = true) ||
+                    it.label.equals(normalized, ignoreCase = true)
         }
     }
 }

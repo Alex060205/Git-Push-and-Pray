@@ -19,6 +19,7 @@ data class Recovery(val status: RecoveryStatus, val time: RecoveryTime? = null) 
 
 /**
  * One per day (stored under the date, so saving the same day again replaces it).
+ * Weather is attached automatically, not asked.
  * The four check-in questions are painLevel, fatigue, interference and recovery.
  * @param painLevel Pain today, 0-10
  * @param fatigue Fatigue today, 0-10
