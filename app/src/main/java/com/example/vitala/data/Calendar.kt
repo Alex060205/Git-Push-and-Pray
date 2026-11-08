@@ -19,6 +19,7 @@ class Calendar(
 ) {
     /**
      * Returns a list of all dates in the current month.
+     * @return List<LocalDate>
      */
     val daysInMonth: List<LocalDate>
         get() {

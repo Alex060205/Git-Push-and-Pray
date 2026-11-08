@@ -18,6 +18,7 @@ data class Recovery(val status: RecoveryStatus, val time: RecoveryTime? = null) 
 
 /**
  * One per day (stored under the date, so saving the same day again replaces it).
+ * Weather is attached automatically, not asked.
  * The four check-in questions are painLevel, fatigue, interference and recovery.
  * @param painLevel Pain today, 0-10
  * @param fatigue Fatigue today, 0-10
@@ -47,4 +48,8 @@ data class DailyCheckIn(
         require(interference in 0..10) { "Interference must be 0-10" }
         sleepHours?.let { require(it in 0.0..24.0) { "Sleep hours must be 0-24" } }
     }
+
+    /** Shim for shen-dev code that reads `recovered`. */
+    val recovered: Boolean
+        get() = recovery?.status == RecoveryStatus.RETURNED
 }

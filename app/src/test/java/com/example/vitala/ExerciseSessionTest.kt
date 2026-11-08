@@ -30,12 +30,12 @@ class ExerciseSessionTest {
         assertEquals(SessionStatus.PLANNED, session.status)
         assertNull(session.painDuring)
 
-        session.markDone(PainFeeling.SOME, PainFeeling.NONE)
+        session.markDone(PainFeeling.NONE, PainFeeling.SOME, PainFeeling.NONE)
         assertEquals(SessionStatus.DONE, session.status)
         assertEquals(PainFeeling.SOME, session.painDuring)
         assertEquals(PainFeeling.NONE, session.painAfter)
 
-        session.markSkipped()
+        session.markSkipped(PainFeeling.NONE)
         assertEquals(SessionStatus.SKIPPED, session.status)
     }
 

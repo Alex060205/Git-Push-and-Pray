@@ -30,6 +30,7 @@ import androidx.compose.ui.layout.ContentScale
 import androidx.compose.ui.tooling.preview.Preview
 import androidx.compose.ui.unit.dp
 import androidx.lifecycle.lifecycleScope
+import com.example.vitala.Recognition.PrescriptionScreen
 import com.example.vitala.data.GoogleWeatherService
 import com.example.vitala.data.HealthLogRepository
 import com.example.vitala.data.Patient
@@ -51,6 +52,9 @@ import java.time.DayOfWeek
 /** Temporary: true = report data goes through Firestore; false = built straight from sample data. */
 private const val USE_FIREBASE = true
 
+/** Temporary: true = report preview (main), false = PrescriptionScreen (shen-dev). */
+private const val SHOW_REPORT_TEST = false
+
 class MainActivity : ComponentActivity() {
 
     // Text shown on screen; Compose redraws when this changes
@@ -69,16 +73,20 @@ class MainActivity : ComponentActivity() {
 //        AppContainer.init()   // loads demo data
 //        testGemini()
 //        testWeather()
-        testReport()
+        if (SHOW_REPORT_TEST) testReport()
 
         setContent {
             VitalaTheme {
-                Scaffold(modifier = Modifier.fillMaxSize()) { innerPadding ->
-                    ReportPreview(
-                        status = reportStatus,
-                        pages = reportPages,
-                        modifier = Modifier.padding(innerPadding)
-                    )
+                if (SHOW_REPORT_TEST) {
+                    Scaffold(modifier = Modifier.fillMaxSize()) { innerPadding ->
+                        ReportPreview(
+                            status = reportStatus,
+                            pages = reportPages,
+                            modifier = Modifier.padding(innerPadding)
+                        )
+                    }
+                } else {
+                    PrescriptionScreen()
                 }
             }
         }
