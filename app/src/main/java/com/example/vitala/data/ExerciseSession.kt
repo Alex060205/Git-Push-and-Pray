@@ -1,16 +1,18 @@
 package com.example.vitala.data
 
+import com.google.firebase.firestore.DocumentId
+import com.google.firebase.firestore.Exclude
+import kotlinx.coroutines.CoroutineScope
 import java.time.LocalDate
 import java.time.LocalTime
 import java.util.UUID
 
-
 /**
  * One exercise occurrence: what was planned, and how it went.
  * @param id Unique identifier
- * @param date Date of the exercise
- * @param scheduledTime Time of the exercise
- * @param intensity Intensity of the exercise
+ * @param patientId Patient this session belongs to
+ * @param date Date of the exercise, "yyyy-MM-dd"
+ * @param scheduledTime Time of the exercise, "HH:mm"
  * @param items Items in the exercise
  * @param status Status of the exercise
  * @param painBefore Pain before starting
@@ -20,56 +22,83 @@ import java.util.UUID
  * @param stopReason Why it was skipped or cut short
  */
 data class ExerciseSession(
-    val id: String = UUID.randomUUID().toString(),
-    val date: LocalDate,
-    val scheduledTime: LocalTime,
-    val intensity: Intensity,
-    val items: List<ExerciseItem>,
-    val status: SessionStatus = SessionStatus.PLANNED,
-    val painBefore: PainFeeling? = null,
-    val painDuring: PainFeeling? = null,
-    val painAfter: PainFeeling? = null,
-    val symptomResponse: SymptomResponse? = null,
-    val stopReason: StopReason? = null
-) : Notifiable {
+    @DocumentId val id: String = UUID.randomUUID().toString(),
+    val patientId: String = "",
+    val date: String = LocalDate.now().toString(),
+    val scheduledTime: String = LocalTime.now().toString(),
+    val items: List<ExerciseItem> = emptyList(),
+    var status: SessionStatus = SessionStatus.PLANNED,
+    var painBefore: PainFeeling? = null,
+    var painDuring: PainFeeling? = null,
+    var painAfter: PainFeeling? = null,
+    var symptomResponse: SymptomResponse? = null,
+    var stopReason: StopReason? = null
+) {
+    /** [date] as a LocalDate. Not stored in Firestore. */
+    @get:Exclude
+    val localDate: LocalDate get() = LocalDate.parse(date)
+
+    /** [scheduledTime] as a LocalTime. Not stored in Firestore. */
+    @get:Exclude
+    val localTime: LocalTime get() = LocalTime.parse(scheduledTime)
 
     /** Records pain before starting. Status stays PLANNED until the session ends. */
-    fun recordPainBefore(before: PainFeeling) = copy(painBefore = before)
-
-    /** Marks the exercise as done. */
-    fun markDone(during: PainFeeling, after: PainFeeling, symptoms: SymptomResponse? = null) =
-        copy(status = SessionStatus.DONE, painDuring = during, painAfter = after,
-            symptomResponse = symptoms, stopReason = null)
-
-    /** Marks the exercise as started but stopped early, with the reason. */
-    fun markCutShort(reason: StopReason, during: PainFeeling, after: PainFeeling, symptoms: SymptomResponse? = null) =
-        copy(status = SessionStatus.CUT_SHORT, painDuring = during, painAfter = after,
-            symptomResponse = symptoms, stopReason = reason)
-
-    /** Marks the exercise as skipped, with the reason if one was given. */
-    fun markSkipped(reason: StopReason? = null) = copy(status = SessionStatus.SKIPPED, stopReason = reason)
+    fun recordPainBefore(before: PainFeeling) {
+        this.painBefore = before
+    }
 
     /**
-     * The key is tied to the session id, so moving the time replaces the old reminder instead of
-     * adding a second one
-     * @param date Date to check
-     * @return List with one reminder, or empty if the date doesn't match or the session is
-     * already done, cut short or skipped
+     * Marks the exercise as done.
+     * @param during Pain level during the exercise
+     * @param after Pain level after the exercise
+     * @param symptoms Symptom response asked right after the session
      */
-    override fun notificationsFor(date: LocalDate): List<NotificationRequest> {
-        if (date != this.date || status != SessionStatus.PLANNED) return emptyList()
-        return listOf(
-            NotificationRequest(
-                key = "session-$id",
-                kind = NotificationKind.EXERCISE,
-                title = when (intensity) {
-                    Intensity.REST -> "Time for some light strethcing" //placeholders
-                    Intensity.GENTLE -> "Time for your gentle exercises"
-                    Intensity.FULL -> "Time for your exercise"
-                },
-                body = items.joinToString(",") { it.name }.ifEmpty { "Tap to start" },
-                triggerAt = date.atTime(scheduledTime)
-            )
-        )
+    fun markDone(during: PainFeeling, after: PainFeeling, symptoms: SymptomResponse? = null) {
+        this.status = SessionStatus.DONE
+        this.painDuring = during
+        this.painAfter = after
+        this.symptomResponse = symptoms
+        this.stopReason = null
+    }
+
+    /**
+     * Marks the exercise as started but stopped early.
+     * @param reason Why it was cut short
+     */
+    fun markCutShort(reason: StopReason, during: PainFeeling, after: PainFeeling, symptoms: SymptomResponse? = null) {
+        this.status = SessionStatus.CUT_SHORT
+        this.painDuring = during
+        this.painAfter = after
+        this.symptomResponse = symptoms
+        this.stopReason = reason
+    }
+
+    /**
+     * Marks the exercise as skipped.
+     * @param reason Why, if the patient gave one
+     */
+    fun markSkipped(reason: StopReason? = null) {
+        this.status = SessionStatus.SKIPPED
+        this.stopReason = reason
+    }
+
+    /**
+     * Starts the exercise items with a coroutine scope.
+     */
+    fun start(scope: CoroutineScope, onTick: (ExerciseItem, Long) -> Unit = { _, _ -> }) {
+        for (item in items) {
+            item.start(scope) { seconds ->
+                onTick(item, seconds)
+            }
+        }
+    }
+
+    /**
+     * Stops the exercise items.
+     */
+    fun stop() {
+        for (item in items) {
+            item.stop()
+        }
     }
 }

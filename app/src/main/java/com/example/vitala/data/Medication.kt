@@ -24,7 +24,7 @@ data class Medication(
     val notes: String = ""                    // e.g. "with food"
 ) : Notifiable {
     init {
-        require(type == MedicationType.AS_NEEDED || times.isNotEmpty()) {
+        require(type != MedicationType.SCHEDULED || times.isNotEmpty()) {
             "Scheduled medication needs at least one time"
         }
     }
