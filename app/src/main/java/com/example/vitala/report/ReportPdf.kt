@@ -11,6 +11,7 @@ import android.text.StaticLayout
 import android.text.TextPaint
 import com.example.vitala.data.PainFeeling
 import com.example.vitala.data.PrescribedExercise
+import com.example.vitala.data.SymptomResponse
 import java.io.OutputStream
 import java.time.DayOfWeek
 import java.time.LocalDate
@@ -180,9 +181,9 @@ object ReportPdf {
     // ---------- Last 7 days ----------
 
     private fun Writer.lastWeek(d: ReportData) {
-        text(weekSentence("Fatigue", d.lastWeek.mapNotNull { e -> e.fatigue?.let { e.date to it } }))
+        text(weekSentence("Fatigue", d.lastWeek.map { it.date to it.fatigue }))
         text(weekSentence("Interference with usual daily activities",
-            d.lastWeek.mapNotNull { e -> e.interference?.let { e.date to it } }))
+            d.lastWeek.map { it.date to it.interference }))
         val checks = d.lastWeek.count { it.recovery != null }
         text(
             if (checks == 0) "No recovery check was recorded in the last 7 days. It is only asked while a change or flare is being evaluated."
@@ -261,13 +262,14 @@ object ReportPdf {
         space(4f)
 
         table(
-            listOf("Date", "Result", "Pain during", "Pain after", "Symptom response", "Reason"),
-            listOf(0.11f, 0.15f, 0.13f, 0.13f, 0.27f, 0.21f),
+            listOf("Date", "Result", "Pain before", "Pain during", "Pain after", "Symptom response", "Reason"),
+            listOf(0.10f, 0.13f, 0.11f, 0.11f, 0.11f, 0.25f, 0.19f),
             d.sessions.map { r ->
                 val s = r.session
                 listOf(
                     s.date.format(shortDate),
                     r.result.label,
+                    s.painBefore.label(),
                     s.painDuring.label(),
                     s.painAfter.label(),
                     r.symptoms?.label ?: if (r.attempted) "Not recorded" else "—",
@@ -277,7 +279,7 @@ object ReportPdf {
             emphasis = d.sessions.indices.filter { d.sessions[it].incomplete }.toSet()
         )
         text(
-            "Shaded rows in bold were skipped, cut short or have no result recorded. Pain during and after: none, some or a lot. " +
+            "Shaded rows in bold were skipped, cut short or have no result recorded. Pain before, during and after: none, some or a lot. " +
                     "Symptom response is asked right after each session: familiar and within the agreed range, " +
                     "familiar but beyond it, or new or different.", muted = true
         )

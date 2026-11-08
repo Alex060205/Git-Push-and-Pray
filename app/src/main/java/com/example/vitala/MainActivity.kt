@@ -31,11 +31,13 @@ import androidx.compose.ui.tooling.preview.Preview
 import androidx.compose.ui.unit.dp
 import androidx.lifecycle.lifecycleScope
 import com.example.vitala.data.GoogleWeatherService
+import com.example.vitala.data.HealthLogRepository
 import com.example.vitala.data.Patient
 import com.example.vitala.data.PrescribedExercise
 import com.example.vitala.report.ReportPdf
 import com.example.vitala.report.ReportSample
 import com.example.vitala.report.ReportSaver
+import com.example.vitala.report.loadReport
 import com.example.vitala.ui.theme.VitalaTheme
 import com.google.firebase.Firebase
 import com.google.firebase.ai.ai
@@ -45,6 +47,9 @@ import kotlinx.coroutines.launch
 import kotlinx.coroutines.withContext
 import java.io.File
 import java.time.DayOfWeek
+
+/** Temporary: true = report data goes through Firestore; false = built straight from sample data. */
+private const val USE_FIREBASE = false
 
 class MainActivity : ComponentActivity() {
 
@@ -87,7 +92,15 @@ class MainActivity : ComponentActivity() {
         lifecycleScope.launch {
             try {
                 val (location, pages) = withContext(Dispatchers.IO) {
-                    val data = ReportSample.build(samplePatient())
+                    val patient = samplePatient()
+                    val data = if (USE_FIREBASE) {
+                        // Round trip: write the sample records to Firestore, then read them back.
+                        val repo = HealthLogRepository()
+                        ReportSample.upload(repo, patient.id)
+                        repo.loadReport(patient, ReportSample.ANCHOR, sampleNotes = listOf(ReportSample.WARNING))
+                    } else {
+                        ReportSample.build(patient)
+                    }
                     val fileName = ReportPdf.fileName(data.to)
 
                     // Copy for the on-screen preview
@@ -126,6 +139,7 @@ class MainActivity : ComponentActivity() {
 
     /** Temporary test patient. Replace with the real one from Firebase. */
     private fun samplePatient() = Patient(
+        id = "test-patient",   // fixed, so repeated runs overwrite the same Firestore documents
         name = "Alex Rivera",
         birthDate = "1968-04-22",
         gender = "Female",

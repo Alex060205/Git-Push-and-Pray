@@ -2,64 +2,17 @@ package com.example.vitala.report
 
 import com.example.vitala.data.DailyCheckIn
 import com.example.vitala.data.ExerciseSession
+import com.example.vitala.data.HealthLogRepository
 import com.example.vitala.data.Patient
+import com.example.vitala.data.PegResponse
 import com.example.vitala.data.SessionStatus
+import com.example.vitala.data.StopReason
+import com.example.vitala.data.SymptomResponse
 import java.time.Instant
 import java.time.LocalDate
 
 /** One rating for one day, 0-10. */
 data class DailyRating(val date: LocalDate, val value: Int)
-
-/** Why a session was skipped or cut short. Move into the data layer once ExerciseSession stores it. */
-enum class StopReason(val label: String) {
-    PAIN("Pain"), FATIGUE("Fatigue"), NO_TIME("No time"), OTHER("Other")
-}
-
-/** Asked immediately after each session. */
-enum class SymptomResponse(val label: String) {
-    WITHIN_RANGE("Familiar, within range"),
-    BEYOND_RANGE("Familiar, beyond range"),
-    NEW_OR_DIFFERENT("New or different")
-}
-
-/** Asked at the daily check-in while a change or flare is being evaluated. */
-enum class RecoveryStatus(val label: String) {
-    RETURNED("Back to usual range"), STILL_ABOVE("Still above usual range"), UNSURE("Unsure")
-}
-
-/** If recovered, roughly when. */
-enum class RecoveryTime(val label: String) { SAME_DAY("same day"), NEXT_DAY("next day"), LATER("later") }
-
-data class Recovery(val status: RecoveryStatus, val time: RecoveryTime? = null) {
-    val label get() = if (status == RecoveryStatus.RETURNED && time != null) "${status.label} (${time.label})" else status.label
-}
-
-/**
- * Daily check-in items DailyCheckIn doesn't have yet. Fatigue and interference are 0-10;
- * interference is "with usual daily activities over the previous 24 hours".
- * Delete once these live on DailyCheckIn.
- */
-data class DailyExtra(
-    val date: LocalDate,
-    val fatigue: Int? = null,
-    val interference: Int? = null,
-    val recovery: Recovery? = null
-)
-
-/** Weekly PEG: pain on average, interference with enjoyment of life, interference with general activity. Each 0-10. */
-data class PegEntry(val date: LocalDate, val pain: Int, val enjoyment: Int, val activity: Int) {
-    val score: Double get() = (pain + enjoyment + activity) / 3.0
-}
-
-/**
- * Session details ExerciseSession can't hold yet: cut short, the reason for a skip or cut,
- * and the symptom response. Keyed by session id. Delete once these live on ExerciseSession.
- */
-data class SessionOutcome(
-    val cutShort: Boolean = false,
-    val reason: StopReason? = null,
-    val symptoms: SymptomResponse? = null
-)
 
 enum class SessionResult(val label: String) {
     FINISHED("Finished"), CUT_SHORT("Cut short"), SKIPPED("Skipped"), NO_RECORD("No result recorded")
@@ -68,11 +21,11 @@ enum class SessionResult(val label: String) {
 data class SessionRow(
     val session: ExerciseSession,
     val result: SessionResult,
-    val reason: StopReason?,
-    val symptoms: SymptomResponse?,
     /** From the session's items, or the plan for that weekday if the session has none. */
     val exerciseNames: List<String>
 ) {
+    val reason: StopReason? get() = session.stopReason
+    val symptoms: SymptomResponse? get() = session.symptomResponse
     val incomplete get() = result != SessionResult.FINISHED
     val attempted get() = result == SessionResult.FINISHED || result == SessionResult.CUT_SHORT
 }
@@ -83,12 +36,12 @@ data class ReportData(
     val from: LocalDate,
     val to: LocalDate,
     val patient: Patient?,
-    /** Pain from DailyCheckIn.painLevel, at most one per day, last 28 days. */
+    /** Daily pain, at most one per day, last 28 days. */
     val pain: List<DailyRating>,
-    /** Fatigue, interference and recovery for the last 7 days. */
-    val lastWeek: List<DailyExtra>,
+    /** Check-ins from the last 7 days (fatigue, interference, recovery). */
+    val lastWeek: List<DailyCheckIn>,
     /** PEG questionnaires completed in the last 28 days, oldest first. */
-    val peg: List<PegEntry>,
+    val peg: List<PegResponse>,
     val sessions: List<SessionRow>,
     val missingNotes: List<String>,
     /** Non-empty prints a SAMPLE DATA warning on the PDF. */
@@ -108,23 +61,18 @@ data class ReportData(
             patient: Patient?,
             checkIns: List<DailyCheckIn>,
             sessions: List<ExerciseSession>,
-            daily: List<DailyExtra> = emptyList(),
-            peg: List<PegEntry> = emptyList(),
-            outcomes: Map<String, SessionOutcome> = emptyMap(),
+            peg: List<PegResponse> = emptyList(),
             sampleNotes: List<String> = emptyList()
         ): ReportData {
             val from = today.minusDays(DAYS - 1)
             val range = from..today
             val week = today.minusDays(6)..today
 
-            val pain = checkIns.filter { it.date in range }
-                .groupBy { it.date }
-                .map { (date, list) -> DailyRating(date, list.last().painLevel) }
-                .sortedBy { it.date }
-
-            val lastWeek = daily.filter { it.date in week }
+            val daily = checkIns.filter { it.date in range }
                 .groupBy { it.date }.map { it.value.last() }
                 .sortedBy { it.date }
+            val pain = daily.map { DailyRating(it.date, it.painLevel) }
+            val lastWeek = daily.filter { it.date in week }
 
             val pegInRange = peg.filter { it.date in range }.sortedBy { it.date }
 
@@ -134,37 +82,35 @@ data class ReportData(
                 .filterNot { it.status == SessionStatus.PLANNED && !it.date.isBefore(today) }
                 .sortedWith(compareBy<ExerciseSession>({ it.date }, { it.scheduledTime }))
                 .map { s ->
-                    val outcome = outcomes[s.id]
                     val result = when (s.status) {
+                        SessionStatus.DONE -> SessionResult.FINISHED
+                        SessionStatus.CUT_SHORT -> SessionResult.CUT_SHORT
                         SessionStatus.SKIPPED -> SessionResult.SKIPPED
-                        SessionStatus.DONE -> if (outcome?.cutShort == true) SessionResult.CUT_SHORT else SessionResult.FINISHED
                         SessionStatus.PLANNED -> SessionResult.NO_RECORD
                     }
                     val names = s.items.map { it.name }
                         .ifEmpty { patient?.exercisesFor(s.date)?.map { it.name }.orEmpty() }
-                    SessionRow(s, result, outcome?.reason, outcome?.symptoms, names)
+                    SessionRow(s, result, names)
                 }
 
             val missing = buildList {
-                val noCheckIn = DAYS - pain.size
-                if (pain.isEmpty()) add("No daily check-ins were recorded in the last 28 days.")
+                val noCheckIn = DAYS - daily.size
+                if (daily.isEmpty()) add("No daily check-ins were recorded in the last 28 days.")
                 else if (noCheckIn > 0) add("No daily check-in on $noCheckIn of the 28 days.")
-
-                val fatigueDays = lastWeek.count { it.fatigue != null }
-                if (fatigueDays < 7) add("Fatigue was rated on $fatigueDays of the last 7 days.")
-                val interferenceDays = lastWeek.count { it.interference != null }
-                if (interferenceDays < 7) add("Interference with daily activities was rated on $interferenceDays of the last 7 days.")
+                if (lastWeek.size < 7) add("Fatigue and interference were rated on ${lastWeek.size} of the last 7 days.")
 
                 if (pegInRange.isEmpty()) add("No PEG questionnaire was completed in the last 28 days.")
                 else if (pegInRange.size < 4) add("The weekly PEG questionnaire was completed ${pegInRange.size} times in 4 weeks.")
 
                 if (rows.isEmpty()) add("No exercise sessions were recorded in the last 28 days.")
                 val noRecord = rows.count { it.result == SessionResult.NO_RECORD }
-                if (noRecord > 0) add("$noRecord past sessions were never marked done or skipped.")
+                if (noRecord > 0) add("$noRecord past sessions were never marked done, cut short or skipped.")
                 val noReason = rows.count {
                     (it.result == SessionResult.SKIPPED || it.result == SessionResult.CUT_SHORT) && it.reason == null
                 }
                 if (noReason > 0) add("No reason was recorded for $noReason skipped or cut-short sessions.")
+                val noPainBefore = rows.count { it.attempted && it.session.painBefore == null }
+                if (noPainBefore > 0) add("Pain before exercise was not recorded for $noPainBefore sessions.")
                 val noPainAfter = rows.count { it.attempted && it.session.painAfter == null }
                 if (noPainAfter > 0) add("Pain after exercise was not recorded for $noPainAfter sessions.")
                 val noSymptoms = rows.count { it.attempted && it.symptoms == null }
@@ -178,4 +124,20 @@ data class ReportData(
             )
         }
     }
+}
+
+/** Loads the last 28 days for [patient] from Firestore and builds the report. */
+suspend fun HealthLogRepository.loadReport(
+    patient: Patient,
+    today: LocalDate = LocalDate.now(),
+    sampleNotes: List<String> = emptyList()
+): ReportData {
+    val from = today.minusDays(ReportData.DAYS - 1)
+    return ReportData.build(
+        today = today, now = Instant.now(), patient = patient,
+        checkIns = checkIns(patient.id, from, today),
+        sessions = sessions(patient.id, from, today),
+        peg = peg(patient.id, from, today),
+        sampleNotes = sampleNotes
+    )
 }
