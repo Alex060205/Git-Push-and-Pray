@@ -26,7 +26,7 @@ data class ExerciseSession(
     val status: SessionStatus = SessionStatus.PLANNED,
     val painDuring: PainFeeling? = null,
     val painAfter: PainFeeling? = null
-) {
+) : Notifiable{
     /**
      * Marks the exercise as done.
      * @param during Pain level during the exercise
@@ -42,4 +42,28 @@ data class ExerciseSession(
      * @return A new exercise session object with the status set to SKIPPED.
      */
     fun markSkipped() = copy(status = SessionStatus.SKIPPED)
+
+    /**
+     * The key is tied to the session id, so moving the time replaces the old reminder instead of
+     * adding a second one
+     * @param date Date to check
+     * @return List with one reminder, or empty if the date doesn't match or the session is
+     * already donde or skipped
+     */
+    override fun notificationsFor(date: LocalDate): List<NotificationRequest> {
+        if (date != this.date || status != SessionStatus.PLANNED) return emptyList()
+        return listOf(
+            NotificationRequest(
+                key = "session-$id",
+                kind = NotificationKind.EXERCISE,
+                title = when (intensity) {
+                    Intensity.REST -> "Time for some light strethcing" //placeholders
+                    Intensity.GENTLE -> "Time for your gentle exercises"
+                    Intensity.FULL -> "Time for your exercise"
+                },
+                body = items.joinToString(",") { it.name }.ifEmpty{"Tap to start"},
+                    triggerAt = date.atTime(scheduledTime)
+                    )
+            )
+    }
 }
