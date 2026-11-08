@@ -10,7 +10,7 @@ import java.time.LocalDate
 
 class AdaptiveRepository(
     private val db: FirebaseFirestore = Firebase.firestore
-) {
+) : com.example.vitala.app.AdaptiveSource {
 
     private fun program(
         patientId: String,
@@ -29,7 +29,7 @@ class AdaptiveRepository(
         .collection("exercises")
         .document(validId(exerciseId))
 
-    suspend fun activate(
+    override suspend fun activate(
         patientId: String,
         prepared: PreparedProgram
     ) {
@@ -88,7 +88,7 @@ class AdaptiveRepository(
         }.await()
     }
 
-    suspend fun loadProgram(
+    override suspend fun loadProgram(
         patientId: String,
         programId: String
     ): PreparedProgram {
@@ -135,7 +135,7 @@ class AdaptiveRepository(
      * A missing answer stays missing.
      * Do not fill unanswered safety questions with false.
      */
-    suspend fun saveCheckIn(
+    override suspend fun saveCheckIn(
         patientId: String,
         programId: String,
         exerciseId: String,
@@ -198,7 +198,18 @@ class AdaptiveRepository(
         }.await()
     }
 
-    suspend fun evaluate(
+    /** The dose currently assigned for an exercise (used to show "tomorrow" and Home previews). */
+    override suspend fun currentState(
+        patientId: String,
+        programId: String,
+        exerciseId: String
+    ): ExerciseState? {
+        val json = exercise(patientId, programId, exerciseId)
+            .get().await().getString("stateJson") ?: return null
+        return AdaptiveJson.gson.fromJson(json, ExerciseState::class.java)
+    }
+
+    override suspend fun evaluate(
         patientId: String,
         programId: String,
         exerciseId: String,
@@ -272,7 +283,7 @@ class AdaptiveRepository(
      * Applies at most one assignment per exercise per day.
      * Safety can still be evaluated again.
      */
-    suspend fun applyAssignment(
+    override suspend fun applyAssignment(
         patientId: String,
         evaluation: Evaluation
     ): Boolean {
@@ -392,7 +403,7 @@ class AdaptiveRepository(
      * Records the patient-confirmed actual amount.
      * A timer alone does not confirm completion.
      */
-    suspend fun recordSession(
+    override suspend fun recordSession(
         patientId: String,
         programId: String,
         exerciseId: String,

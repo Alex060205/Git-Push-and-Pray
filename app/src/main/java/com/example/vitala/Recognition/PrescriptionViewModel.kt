@@ -296,6 +296,22 @@ class PrescriptionViewModel(
         }
     }
 
+    /** Plan typed into the form: composed into text and read with the same extractor and review step. */
+    fun analyzeTypedPlan(text: String) {
+        if (text.isBlank() || _state.value.busy) return
+        clearPages()
+        launchAnalysis {
+            _state.update { it.copy(sourceText = text) }
+            acceptExtracted(extractor.extractText(text))
+        }
+    }
+
+    /** Forget the scan session after a plan has been saved. Keeps image files (they belong to the plan now). */
+    fun finishScan() {
+        _state.value = ScanUiState()
+        savedState[KEY_PAGES] = ArrayList<String>()
+    }
+
     fun onDocumentPicked(uri: Uri?) {
         if (uri == null || _state.value.busy) {
             return

@@ -1,58 +1,43 @@
 package com.example.vitala.ui.theme
 
-import android.app.Activity
-import android.os.Build
-import androidx.compose.foundation.isSystemInDarkTheme
+import androidx.compose.foundation.layout.Box
 import androidx.compose.material3.MaterialTheme
-import androidx.compose.material3.darkColorScheme
-import androidx.compose.material3.dynamicDarkColorScheme
-import androidx.compose.material3.dynamicLightColorScheme
 import androidx.compose.material3.lightColorScheme
 import androidx.compose.runtime.Composable
-import androidx.compose.ui.platform.LocalContext
+import androidx.compose.runtime.CompositionLocalProvider
+import androidx.compose.runtime.compositionLocalOf
+import androidx.compose.ui.graphics.Color
+import androidx.compose.ui.platform.LocalDensity
+import androidx.compose.ui.unit.Density
 
-private val DarkColorScheme = darkColorScheme(
-    primary = Purple80,
-    secondary = PurpleGrey80,
-    tertiary = Pink80
-)
+val LocalHighContrast = compositionLocalOf { false }
 
-private val LightColorScheme = lightColorScheme(
-    primary = Purple40,
-    secondary = PurpleGrey40,
-    tertiary = Pink40
-
-    /* Other default colors to override
-    background = Color(0xFFFFFBFE),
-    surface = Color(0xFFFFFBFE),
-    onPrimary = Color.White,
-    onSecondary = Color.White,
-    onTertiary = Color.White,
-    onBackground = Color(0xFF1C1B1F),
-    onSurface = Color(0xFF1C1B1F),
-    */
-)
-
+/**
+ * Light theme only on purpose: the brief asks for mostly white with blue actions and high contrast.
+ * [textScale] is the in-app text size (Normal / Large / Extra large) and multiplies the phone's own setting.
+ */
 @Composable
 fun VitalaTheme(
-    darkTheme: Boolean = isSystemInDarkTheme(),
-    // Dynamic color is available on Android 12+
-    dynamicColor: Boolean = true,
+    textScale: Float = 1f,
+    highContrast: Boolean = false,
     content: @Composable () -> Unit
 ) {
-    val colorScheme = when {
-        dynamicColor && Build.VERSION.SDK_INT >= Build.VERSION_CODES.S -> {
-            val context = LocalContext.current
-            if (darkTheme) dynamicDarkColorScheme(context) else dynamicLightColorScheme(context)
-        }
-
-        darkTheme -> DarkColorScheme
-        else -> LightColorScheme
-    }
-
-    MaterialTheme(
-        colorScheme = colorScheme,
-        typography = Typography,
-        content = content
+    val action = if (highContrast) BrandBlueDark else BrandBlue
+    val text = if (highContrast) Color.Black else TextPrimary
+    val scheme = lightColorScheme(
+        primary = action, onPrimary = Color.White,
+        secondary = BrandBlueDark, onSecondary = Color.White,
+        background = Color.White, onBackground = text,
+        surface = Color.White, onSurface = text,
+        surfaceVariant = Panel, onSurfaceVariant = if (highContrast) Color.Black else TextSecondary,
+        outline = if (highContrast) Color.Black else BorderGrey,
+        error = Alert, onError = Color.White
     )
+    val density = LocalDensity.current
+    CompositionLocalProvider(
+        LocalHighContrast provides highContrast,
+        LocalDensity provides Density(density.density, density.fontScale * textScale)
+    ) {
+        MaterialTheme(colorScheme = scheme, typography = Typography, content = content)
+    }
 }

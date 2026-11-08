@@ -78,7 +78,11 @@ object ReportPdf {
             keyValue("Name", p.name)
             keyValue("Date of birth", birthText(p.birthDate, d.to))
             if (p.gender.isNotBlank()) keyValue("Gender", p.gender)
-            keyValue("Height / weight", "%.0f cm · %.1f kg".format(p.heightCm, p.weightKg))
+            keyValue(
+                "Height / weight",
+                // Patient falls back to 170 cm / 70 kg when nothing was entered; don't print made-up numbers.
+                if (p.heightCm == 170.0 && p.weightKg == 70.0) "Not added" else "%.0f cm · %.1f kg".format(p.heightCm, p.weightKg)
+            )
             keyValue("Affected areas", p.affectedJoints.joinToString(", "))
         } ?: text("No patient profile recorded.")
 
