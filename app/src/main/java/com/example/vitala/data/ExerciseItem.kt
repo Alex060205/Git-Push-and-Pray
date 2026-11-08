@@ -24,6 +24,8 @@ data class ExerciseItem(
         }
     }
 
+    var status: SessionStatus = SessionStatus.PLANNED
+
     @OptIn(ExperimentalAtomicApi::class)
     private val isStarted = AtomicBoolean(false)
     private var timerJob: Job? = null

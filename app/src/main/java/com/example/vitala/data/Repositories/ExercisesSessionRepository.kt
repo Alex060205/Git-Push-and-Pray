@@ -10,9 +10,6 @@ class ExercisesSessionRepository {
     val exercisesSessionCollection = db.collection("exercisesSession")
     val _sessions = mutableListOf<ExerciseSession>()
 
-
-
-
     init {
         exercisesSessionCollection.addSnapshotListener { snapshot, error ->
             if (error != null) {
@@ -34,6 +31,4 @@ class ExercisesSessionRepository {
     fun getSessions(patientId: String): List<ExerciseSession> {
         return _sessions.filter { it.patientId == patientId }
     }
-
-
 }
