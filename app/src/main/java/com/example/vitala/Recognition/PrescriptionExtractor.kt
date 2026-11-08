@@ -288,51 +288,95 @@ class PrescriptionExtractor(
             printed or handwritten. A PDF may have several pages; read all of them.
             Several photos are pages of the same prescription, in order: read all
             of them and return one combined result. If the same item appears on
-            two photos (e.g. overlapping shots), list it once.
+            two photos (e.g. overlapping shots), list it once. Read every part of
+            every page: headers, tables, footnotes, margins, boxes, handwritten
+            additions and the back of a page if shown.
+
+            Your output is later turned into a daily pacing plan by another step
+            that sees only your output, not the sheet. So capture every number,
+            date and rule that decides how much to do on a given day and when the
+            amount changes. If it is on the sheet and not in your output, the
+            plan cannot use it.
 
             Rules:
             - Extract only what is on the sheet. Never add exercises, doses, rules or
-              warnings that are not written there.
+              warnings that are not written there. Never fill a gap with a typical
+              value.
             - Copy numbers, units, ranges and qualifiers exactly as written
               ("Up to 3 minutes", "10–15 seconds", "at least 2 points", "BID").
-              Words like "up to", "at least", "no more than" must be kept.
+              Words like "up to", "at least", "no more than", "previous",
+              "assigned", "actual", "consecutive" must be kept.
             - Copy every field as written even if it looks wrong (for example a phone
               number in a name field). Do not correct the sheet.
+            - Copy dates exactly as written, including the year if shown. Do not
+              reformat or guess a missing year.
             - Use an empty string or empty list for anything not on the sheet.
-            - If a word or number is hard to read, do not guess. Describe it in
-              "unreadable" (e.g. "duration for days 8-14").
+            - Use "unreadable" only for text that is on the sheet but you cannot
+              read with confidence. Do not guess; describe what it is
+              (e.g. "duration for days 8-14"). Do not list things that are simply
+              missing from the sheet.
             - Do not return the patient's name, health number, date of birth or address.
 
             Fields:
             - programName, bodyArea (include left/right), clinicalContext,
-              treatmentGoals, startDate, reviewPlan (when and under what conditions
-              the program is reviewed), prescriber, clinicContact, dateApproved.
-            - exercises: one item per exercise.
+              treatmentGoals, prescriber, clinicContact (phone, email, clinic
+              name, hours), dateApproved.
+            - startDate: the date the program starts (day 1), as written.
+            - reviewPlan: when and under what conditions the program is reviewed,
+              and what to do when the schedule ends or before the review.
+            - exercises: one item per exercise. Do not merge exercises.
+              - name: as written.
               - setup: starting position and posture.
-              - steps: each movement step in order, one per item.
+              - steps: each movement step in order, one per item, without the
+                step number.
               - pace: speed or timing of a cycle or repetition.
-              - sets, reps, holdOrDuration, frequency, intensityOrLoad.
+              - sets, reps: as written.
+              - holdOrDuration: hold time per repetition and/or the session time,
+                including the starting dose if this exercise has its own.
+              - frequency: how often, with sessions per day and which days
+                (e.g. "once daily", "twice a day", "every other day", "Mon/Wed/Fri").
+              - intensityOrLoad: effort, weight or resistance, including the name
+                of any scale used (e.g. "RPE 3/10", "light band", "2 kg").
               - precautions: limits and warnings for this exercise
                 (e.g. "do not squeeze", "use a smaller movement if too sensitive").
-            - schedule: one item per row of any progression table or phase,
-              with period, dose, frequency, and note (e.g. "ceiling, not a target").
+            - schedule: one item per row of any progression table, phase or
+              starting dose, in order. period = the day, week or date range exactly
+              as written (e.g. "Days 1-7", "Week 2", "After review"); dose = the
+              amount for that period with its qualifier; frequency = how often in
+              that period; note = anything attached to the row (e.g. "ceiling, not
+              a target"). Include the first/starting period. If the starting dose is
+              only stated in the text, add it as its own row too.
             - limits: every hard maximum or minimum on dose, frequency or progression
               (e.g. "do not exceed 4 minutes", "minimum 1 minute",
-              "increase no more than once in 7 days", "do not add extra sessions").
-            - adjustmentRules: every if/then rule for changing the next session.
+              "increase no more than once in 7 days", "do not add extra sessions",
+              "next-day pain must not rise more than 2 points").
+            - adjustmentRules: every if/then rule that changes, holds or keeps the
+              dose for the next session. This includes rules for:
+                increasing (by how much, after how many sessions or days, and what
+                must be true first);
+                reducing (by how much, down to what minimum, and whether from the
+                previous actual dose or the assigned dose);
+                holding or repeating the dose;
+                a missed session, a stopped or incomplete session, or missing
+                pain scores;
+                which pain is compared with which (e.g. "today's pain before
+                exercise vs yesterday's", "next-morning pain vs baseline").
               label = the rule's letter or number if it has one; condition = the
               full "if" part; action = everything to do when it applies, including
               exceptions. Keep each rule complete; do not merge rules.
             - trackingInstructions: what to record, when and how
-              (pain scales, completed time, missed sessions, symptoms).
+              (pain scale name and range, before/after/next day, completed time,
+              reps done, missed sessions, symptoms, PEG or other questionnaires).
             - stopRules: every instruction to pause, stop or seek help. One trigger
-              per item. level must be exactly one of:
+              per item, copied in full. level must be exactly one of:
                 "urgent_care" (seek urgent or emergency care),
                 "stop_and_seek_assessment" (stop exercising and get assessed),
                 "contact_team" (contact the clinician before continuing or progressing),
                 "pause" (pause or ease off the session).
               If unsure between two levels, choose the more urgent one.
-            - generalPrecautions: other warnings for the whole program.
+            - generalPrecautions: other warnings for the whole program, including
+              conditions that mean "do not progress" (e.g. "do not increase if
+              swelling is worse").
             - otherNotes: anything else on the sheet not captured above.
         """.trimIndent()
     }
