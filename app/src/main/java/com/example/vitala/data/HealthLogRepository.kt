@@ -117,6 +117,8 @@ class HealthLogRepository(private val db: FirebaseFirestore = Firebase.firestore
         "painAfter" to painAfter?.name,
         "symptomResponse" to symptomResponse?.name,
         "stopReason" to stopReason?.name,
+        "why" to why,
+        "symptomResponseText" to symptomResponseText,
         // TODO: store full ExerciseItems once their fields are known. Names only for now.
         "itemNames" to items.map { it.name },
         "updatedAt" to FieldValue.serverTimestamp()
@@ -134,7 +136,10 @@ class HealthLogRepository(private val db: FirebaseFirestore = Firebase.firestore
             painDuring = enumOf<PainFeeling>("painDuring"),
             painAfter = enumOf<PainFeeling>("painAfter"),
             symptomResponse = enumOf<SymptomResponse>("symptomResponse"),
-            stopReason = enumOf<StopReason>("stopReason")
+            stopReason = enumOf<StopReason>("stopReason"),
+            why = getString("why").orEmpty(),
+            symptomResponseText = getString("symptomResponseText")
+                ?: getString("symptomResponse").orEmpty()
         )
     }.onFailure { Log.w(TAG, "Skipping unreadable session $id", it) }.getOrNull()
 

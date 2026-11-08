@@ -8,19 +8,7 @@ import java.time.LocalTime
 import java.util.UUID
 
 /**
- * One exercise occurrence: what was planned, and how it went.
- * @param id Unique identifier
- * @param patientId Patient this session belongs to
- * @param date Date of the exercise, "yyyy-MM-dd"
- * @param scheduledTime Time of the exercise, "HH:mm"
- * @param items Items in the exercise
- * @param status Status of the exercise
- * @param painBefore Pain before starting
- * @param painDuring Pain during the exercise
- * @param painAfter Pain after the exercise
- * @param symptomResponse Asked right after the session (DONE, OVERDONE or CUT_SHORT):
- *                        how it felt compared with what the doctor's description led them to expect
- * @param stopReason Why it was skipped or cut short
+ * One exercise session: what was planned and how it went.
  */
 data class ExerciseSession(
     @DocumentId val id: String = UUID.randomUUID().toString(),
@@ -33,78 +21,159 @@ data class ExerciseSession(
     var painDuring: PainFeeling? = null,
     var painAfter: PainFeeling? = null,
     var symptomResponse: SymptomResponse? = null,
-    var stopReason: StopReason? = null
+    var stopReason: StopReason? = null,
+    var why: String = "",
+    var symptomResponseText: String = ""
 ) {
-    /** [date] as a LocalDate. Not stored in Firestore. */
-    @get:Exclude
-    val localDate: LocalDate get() = LocalDate.parse(date)
 
-    /** [scheduledTime] as a LocalTime. Not stored in Firestore. */
     @get:Exclude
-    val localTime: LocalTime get() = LocalTime.parse(scheduledTime)
+    val localDate: LocalDate
+        get() = LocalDate.parse(date)
 
-    /** Items finished so far. Recomputed on each read; not stored in Firestore. */
     @get:Exclude
-    val itemsCompleted: List<ExerciseItem> get() = items.filter { it.status == SessionStatus.DONE }
+    val localTime: LocalTime
+        get() = LocalTime.parse(scheduledTime)
 
-    /** Records pain before starting. Status stays PLANNED until the session ends. */
+    // Current name used by main.
+    @get:Exclude
+    val itemsCompleted: List<ExerciseItem>
+        get() = items.filter {
+            it.status == SessionStatus.DONE
+        }
+
+    // Compatibility with existing callers.
+    @get:Exclude
+    val items_completed: List<ExerciseItem>
+        get() = itemsCompleted
+
     fun recordPainBefore(before: PainFeeling) {
-        this.painBefore = before
+        painBefore = before
     }
 
-    /**
-     * Marks the exercise as done.
-     * @param during Pain level during the exercise
-     * @param after Pain level after the exercise
-     * @param symptoms Symptom response asked right after the session
-     */
-    fun markDone(during: PainFeeling, after: PainFeeling, symptoms: SymptomResponse? = null) {
-        this.status = SessionStatus.DONE
-        this.painDuring = during
-        this.painAfter = after
-        this.symptomResponse = symptoms
-        this.stopReason = null
+    // Structured signature used by main.
+    fun markDone(
+        during: PainFeeling,
+        after: PainFeeling,
+        symptoms: SymptomResponse? = null
+    ) {
+        status = SessionStatus.DONE
+        painDuring = during
+        painAfter = after
+        symptomResponse = symptoms
+        stopReason = null
+        why = ""
+        symptomResponseText = ""
     }
 
-    /**
-     * Marks the exercise as done, but more than prescribed.
-     * @param during Pain level during the exercise
-     * @param after Pain level after the exercise
-     * @param symptoms Symptom response asked right after the session
-     */
-    fun markOverdone(during: PainFeeling, after: PainFeeling, symptoms: SymptomResponse? = null) {
-        this.status = SessionStatus.OVERDONE
-        this.painDuring = during
-        this.painAfter = after
-        this.symptomResponse = symptoms
-        this.stopReason = null
+    // Compatibility with Shen's signature.
+    fun markDone(
+        before: PainFeeling,
+        during: PainFeeling,
+        after: PainFeeling,
+        symptomResponse: String = ""
+    ) {
+        markDone(
+            during = during,
+            after = after,
+            symptoms = parseSymptoms(symptomResponse)
+        )
+
+        painBefore = before
+        symptomResponseText = symptomResponse
     }
 
-    /**
-     * Marks the exercise as started but stopped early.
-     * @param reason Why it was cut short
-     */
-    fun markCutShort(reason: StopReason, during: PainFeeling, after: PainFeeling, symptoms: SymptomResponse? = null) {
-        this.status = SessionStatus.CUT_SHORT
-        this.painDuring = during
-        this.painAfter = after
-        this.symptomResponse = symptoms
-        this.stopReason = reason
+    // Structured signature used by main.
+    fun markOverdone(
+        during: PainFeeling,
+        after: PainFeeling,
+        symptoms: SymptomResponse? = null
+    ) {
+        status = SessionStatus.OVERDONE
+        painDuring = during
+        painAfter = after
+        symptomResponse = symptoms
+        stopReason = null
+        why = ""
+        symptomResponseText = ""
     }
 
-    /**
-     * Marks the exercise as skipped.
-     * @param reason Why, if the patient gave one
-     */
+    // Compatibility with Shen's signature.
+    fun markOverdone(
+        before: PainFeeling,
+        during: PainFeeling,
+        after: PainFeeling,
+        symptomResponse: String = "",
+        why: String = ""
+    ) {
+        markOverdone(
+            during = during,
+            after = after,
+            symptoms = parseSymptoms(symptomResponse)
+        )
+
+        painBefore = before
+        symptomResponseText = symptomResponse
+        stopReason = parseReason(why)
+        this.why = why
+    }
+
+    fun markCutShort(
+        reason: StopReason,
+        during: PainFeeling,
+        after: PainFeeling,
+        symptoms: SymptomResponse? = null
+    ) {
+        status = SessionStatus.CUT_SHORT
+        painDuring = during
+        painAfter = after
+        symptomResponse = symptoms
+        stopReason = reason
+        why = ""
+        symptomResponseText = ""
+    }
+
+    // Structured signature used by main.
     fun markSkipped(reason: StopReason? = null) {
-        this.status = SessionStatus.SKIPPED
-        this.stopReason = reason
+        status = SessionStatus.SKIPPED
+        stopReason = reason
+        painDuring = null
+        painAfter = null
+        symptomResponse = null
+        why = ""
+        symptomResponseText = ""
     }
 
-    /**
-     * Starts the exercise items with a coroutine scope.
-     */
-    fun start(scope: CoroutineScope, onTick: (ExerciseItem, Long) -> Unit = { _, _ -> }) {
+    // Compatibility with Shen's signature.
+    fun markSkipped(
+        before: PainFeeling,
+        why: String = ""
+    ) {
+        markSkipped(reason = parseReason(why))
+
+        painBefore = before
+        this.why = why
+    }
+
+    fun markIncompleted(
+        before: PainFeeling,
+        during: PainFeeling,
+        after: PainFeeling,
+        why: String = ""
+    ) {
+        status = SessionStatus.INCOMPLETE
+        painBefore = before
+        painDuring = during
+        painAfter = after
+        stopReason = parseReason(why)
+        symptomResponse = null
+        symptomResponseText = ""
+        this.why = why
+    }
+
+    fun start(
+        scope: CoroutineScope,
+        onTick: (ExerciseItem, Long) -> Unit = { _, _ -> }
+    ) {
         for (item in items) {
             item.start(scope) { seconds ->
                 onTick(item, seconds)
@@ -112,12 +181,31 @@ data class ExerciseSession(
         }
     }
 
-    /**
-     * Stops the exercise items.
-     */
     fun stop() {
         for (item in items) {
             item.stop()
+        }
+    }
+
+    private fun parseSymptoms(
+        text: String
+    ): SymptomResponse? {
+        val normalized = text.trim()
+
+        return SymptomResponse.values().firstOrNull {
+            it.name.equals(normalized, ignoreCase = true) ||
+                    it.label.equals(normalized, ignoreCase = true)
+        }
+    }
+
+    private fun parseReason(
+        text: String
+    ): StopReason? {
+        val normalized = text.trim()
+
+        return StopReason.values().firstOrNull {
+            it.name.equals(normalized, ignoreCase = true) ||
+                    it.label.equals(normalized, ignoreCase = true)
         }
     }
 }

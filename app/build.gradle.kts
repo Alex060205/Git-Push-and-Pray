@@ -54,6 +54,8 @@ dependencies {
     implementation(libs.androidx.lifecycle.runtime.ktx)
     implementation(platform("com.google.firebase:firebase-bom:34.17.0"))
     implementation("com.google.firebase:firebase-firestore")
+    implementation("com.google.firebase:firebase-auth")
+    implementation("androidx.compose.material:material-icons-extended")
     testImplementation(libs.junit)
     androidTestImplementation(platform(libs.androidx.compose.bom))
     androidTestImplementation(libs.androidx.compose.ui.test.junit4)
@@ -63,6 +65,7 @@ dependencies {
     debugImplementation(libs.androidx.compose.ui.tooling)
 // Managed by the Firebase BoM above (no explicit version required)
     implementation("com.google.firebase:firebase-ai")
+    implementation("com.google.code.gson:gson:2.13.2")
 
 // AndroidX Support & Compose Libraries
     implementation("androidx.exifinterface:exifinterface:1.4.2")

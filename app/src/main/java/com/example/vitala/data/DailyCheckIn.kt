@@ -2,6 +2,7 @@ package com.example.vitala.data
 
 import java.time.LocalDate
 import java.util.UUID
+import com.google.firebase.firestore.Exclude
 
 /**
  * Recovery answer, only asked while a change or flare is being evaluated.
@@ -48,8 +49,33 @@ data class DailyCheckIn(
         require(interference in 0..10) { "Interference must be 0-10" }
         sleepHours?.let { require(it in 0.0..24.0) { "Sleep hours must be 0-24" } }
     }
+    constructor(
+        date: LocalDate,
+        painLevel: Int,
+        fatigue: Int,
+        interference: Int,
+        recovered: Boolean,
+        id: String = UUID.randomUUID().toString()
+    ) : this(
+        id = id,
+        date = date,
+        painLevel = painLevel,
+        fatigue = fatigue,
+        interference = interference,
+        recovery = Recovery(
+            status = if (recovered) {
+                RecoveryStatus.RETURNED
+            } else {
+                RecoveryStatus.UNSURE
+            }
+        )
+    )
 
-    /** Shim for shen-dev code that reads `recovered`. */
-    val recovered: Boolean
-        get() = recovery?.status == RecoveryStatus.RETURNED
+    @get:Exclude
+    val recovered: Boolean?
+        get() = when (recovery?.status) {
+            RecoveryStatus.RETURNED -> true
+            RecoveryStatus.STILL_ABOVE -> false
+            RecoveryStatus.UNSURE, null -> null
+        }
 }
