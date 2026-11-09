@@ -40,6 +40,8 @@ You can also build the app yourself by opening this repository in Android Studio
 - [GitHub repository](https://github.com/Alex060205/Git-Push-and-Pray)
 - [Interface mockups](mockup.pdf)
 - Slides: **[ADD LINK]**
+- [About the project](https://docs.google.com/document/d/1rJEiVJhKBKQ9yU5vaUkCTx_U1Kxf8PLV7xGaPap7Xg8/edit?usp=sharing)
+- [Project summary](https://docs.google.com/document/d/1fsIS6vbAZtQ1le2S7hM729cBf3fozinTzRDmHojk9BA/edit?usp=sharing)
 
 ## Credits
 
