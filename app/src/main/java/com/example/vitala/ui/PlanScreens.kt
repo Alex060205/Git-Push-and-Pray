@@ -140,7 +140,7 @@ fun PlanItemDetailScreen(s: AppState, vm: AppViewModel, programId: String, key: 
         if (item == null) { Text("Not found."); return@Page }
         StatusPill(item.status)
         if (item.status == ItemStatus.MISSING.name) {
-            Text("This was not on your plan. Ask your clinician about it once; we don't guess.", style = MaterialTheme.typography.bodyLarge)
+            Text("Your plan doesn't say this. Ask your clinician; the app won't guess it.", style = MaterialTheme.typography.bodyLarge)
         } else {
             Text(item.summary, style = MaterialTheme.typography.titleSmall)
             if (item.detail.isNotBlank()) Text(item.detail.trim(), style = MaterialTheme.typography.bodyLarge)
@@ -173,7 +173,7 @@ fun AddPlanScreen(s: AppState, vm: AppViewModel, conditionId: String, onboarding
     }
 
     Page(
-        title = if (update) "Update plan" else "Add the plan", subtitle = cond?.name?.let { "$it · new plan from your clinician?" },
+        title = if (update) "Update plan" else "Add the plan", subtitle = cond?.name?.let { if (update) "$it · add the new plan from your clinician" else it },
         onBack = { if (onboarding) vm.setOnboardingStep(2, Screen.AddCondition(true)) else vm.back() },
         steps = if (!update) 2 to 2 else null, topRight = if (!update) "Step 2 of 2" else null,
         actions = {
@@ -183,13 +183,13 @@ fun AddPlanScreen(s: AppState, vm: AppViewModel, conditionId: String, onboarding
             })
         }
     ) {
-        BigOption(Icons.Outlined.PhotoCamera, "Take a photo", "Use your phone camera", enabled = st.canAddPages) {
+        BigOption(Icons.Outlined.PhotoCamera, "Take a photo", "Photograph each page of your plan.", enabled = st.canAddPages) {
             try { takePicture.launch(scan.createPhotoUri()) } catch (e: ActivityNotFoundException) { scan.onCameraUnavailable() }
         }
-        BigOption(Icons.Outlined.Image, "Choose a photo", "From your photos (you can pick several pages)", enabled = st.canAddPages) {
+        BigOption(Icons.Outlined.Image, "Choose a photo", "Pick up to ${com.example.vitala.Recognition.ScanUiState.MAX_PAGES} pages from your photos.", enabled = st.canAddPages) {
             pickImages.launch(PickVisualMediaRequest(ActivityResultContracts.PickVisualMedia.ImageOnly))
         }
-        BigOption(Icons.Outlined.Edit, "Type it in", "Fill in a form", enabled = !st.busy) { vm.go(Screen.ManualPlan(conditionId, onboarding)) }
+        BigOption(Icons.Outlined.Edit, "Type it in", "Enter your plan field by field.", enabled = !st.busy) { vm.go(Screen.ManualPlan(conditionId, onboarding)) }
         LinkButton("Choose a PDF or text file", { pickDoc.launch(arrayOf("application/pdf", "text/plain")) }, Modifier.align(Alignment.CenterHorizontally))
 
         if (st.pages.isNotEmpty()) {
@@ -208,7 +208,7 @@ fun AddPlanScreen(s: AppState, vm: AppViewModel, conditionId: String, onboarding
         }
         Busy(st.busy, if (st.isAnalyzing) "Reading your plan. This can take a minute…" else "Working…")
         st.error?.let { ErrorText(it) }
-        Panel { Text("You will check everything before it is saved. Your plan never changes without you.", style = MaterialTheme.typography.bodySmall) }
+        Panel { Text("You'll check each item before it's saved. Nothing changes without your OK.", style = MaterialTheme.typography.bodySmall) }
     }
 }
 
@@ -262,7 +262,7 @@ fun ManualPlanScreen(s: AppState, vm: AppViewModel, conditionId: String, onboard
     }
     val canRead = !values.value["exercise"].isNullOrBlank() && !st.busy
     Page(
-        title = "Type in your plan", subtitle = "Fill in what your plan says. Anything that isn't on your plan, tick \"Not on my plan\".",
+        title = "Type in your plan", subtitle = "Copy what your plan says into each field.",
         onBack = vm::back,
         actions = {
             PrimaryButton("Check my plan", {
@@ -281,7 +281,8 @@ fun ManualPlanScreen(s: AppState, vm: AppViewModel, conditionId: String, onboard
             }, enabled = canRead)
         }
     ) {
-        LabeledField("Prescribing doctor", doctor, { doctor = it }, helper = "Prefilled from your details. Please confirm.")
+        Hint("If your plan doesn't include a field, tick \"Not on my plan\".")
+        LabeledField("Prescribing doctor", doctor, { doctor = it }, helper = "Filled in from your details. Check it's correct.")
         LabeledField("Clinic phone", contact, { contact = it }, keyboard = androidx.compose.ui.text.input.KeyboardType.Phone)
         LabeledField("Date approved", planDate, { planDate = it }, placeholder = "For example: Nov 8, 2026")
         LabeledField("Start date", start, { start = it }, placeholder = "For example: Nov 9, 2026")
@@ -290,7 +291,7 @@ fun ManualPlanScreen(s: AppState, vm: AppViewModel, conditionId: String, onboard
             LabeledField(f.label + if (f.required) " (required)" else "", if (off) "" else values.value[f.key].orEmpty(),
                 { v -> values.value = values.value + (f.key to v) }, placeholder = "e.g. ${f.example}", singleLine = !f.multiline, minLines = if (f.multiline) 2 else 1,
                 modifier = Modifier.then(if (off) Modifier.background(Panel) else Modifier))
-            if (!f.required) CheckCard(off, "Not on my plan", { on -> notOnPlan.value = if (on) notOnPlan.value + f.key else notOnPlan.value - f.key })
+            if (!f.required) CheckCard(off, "Not on my plan", { on -> notOnPlan.value = if (on) notOnPlan.value + f.key else notOnPlan.value - f.key }, "My plan doesn't include this, so leave it blank.")
         }
         Busy(st.busy, "Reading your plan…")
         st.error?.let { ErrorText(it) }
@@ -318,7 +319,7 @@ fun PlanReviewScreen(s: AppState, vm: AppViewModel, conditionId: String, source:
     val missing = items.filter { it.status == ItemStatus.MISSING.name }
 
     Page(
-        title = "Check your plan", subtitle = when (source) { "manual" -> "Read from what you typed. Please check each line."; else -> "Read from your ${if (source == "file") "file" else "photo"}. Please check each line." },
+        title = "Check your plan", subtitle = when (source) { "manual" -> "Read from what you typed. Check each line against your plan."; else -> "Read from your ${if (source == "file") "file" else "photo"}. Check each line against your plan." },
         onBack = vm::back,
         actions = {
             PrimaryButton("Save plan", {
@@ -345,11 +346,11 @@ fun PlanReviewScreen(s: AppState, vm: AppViewModel, conditionId: String, source:
             }
             if (item.status == ItemStatus.CHECK.name) {
                 // PL-5: wording that the engine needs as a limit is shown in plain words and confirmed, or it stays unconfirmed.
-                CheckCard(item.key in confirmed, "“${item.summary}” matches my plan", { on -> confirmed = if (on) confirmed + item.key else confirmed - item.key })
+                CheckCard(item.key in confirmed, "Matches my plan", { on -> confirmed = if (on) confirmed + item.key else confirmed - item.key }, "“${item.summary}” is what my plan says.")
             }
         }
         if (rx.unreadable.isNotEmpty()) AmberNotice("Could not read clearly", rx.unreadable.joinToString("; "))
-        LabeledField("Prescribing doctor", doctor, { doctor = it }, helper = "Please confirm this is right.")
+        LabeledField("Prescribing doctor", doctor, { doctor = it }, helper = "Check this matches your plan.")
         if (st.pages.isNotEmpty()) {
             Text("Your original", style = MaterialTheme.typography.titleSmall)
             Row(Modifier.horizontalScroll(rememberScrollState()), horizontalArrangement = Arrangement.spacedBy(8.dp)) {
@@ -358,7 +359,8 @@ fun PlanReviewScreen(s: AppState, vm: AppViewModel, conditionId: String, source:
                 }
             }
         }
-        if (missing.isNotEmpty()) Hint("Missing items stay on your list. Your current time stays the same until you ask your clinician.")
+        if (missing.isNotEmpty()) Hint("Missing items stay on your list.")
+        if (missing.isNotEmpty()) Hint("Your session length won't change until you've asked your clinician about them.")
         Busy(s.busy, "Saving your plan…")
         ErrorText(s.error)
     }
@@ -384,7 +386,7 @@ fun ReminderTimesScreen(s: AppState, vm: AppViewModel, onboarding: Boolean, from
         else vm.back()
     }
     Page(
-        title = "When should we remind you?", subtitle = "Pick a time for each exercise. You can change it later in Settings.",
+        title = "Exercise times", subtitle = "Pick when you'll do each exercise. You'll get a reminder before it.",
         onBack = if (fromSave) null else vm::back,
         topRight = if (fromSave) "Plan saved" else null,
         actions = {
@@ -406,21 +408,22 @@ fun ReminderTimesScreen(s: AppState, vm: AppViewModel, onboarding: Boolean, from
                 Text(et.exerciseName, style = MaterialTheme.typography.titleMedium)
                 val freq = item?.let { s.programs[it.plan.id]?.source?.exercises?.getOrNull(it.compiled.sourceIndex)?.frequency }.orEmpty()
                 Hint(listOfNotNull(freq.ifBlank { null }, item?.upTo?.let { "up to ${Dose.fmt(item.dimension, it)}" }).joinToString(" · "))
-                Text("What time?", style = MaterialTheme.typography.titleSmall)
+                Question("Exercise time", "When you'll do this exercise.")
                 val quick = listOf("09:00", s.settings.usualExerciseTime, "14:00").distinct()
                 ChipRow { quick.forEach { t -> ChoiceChip(et.time == t, fmtClock(t), { edited = edited.map { if (it.exerciseId == et.exerciseId) it.copy(time = t) else it } }, Modifier.weight(1f)) } }
                 LinkButton("Choose another time", { timeDialog = et.exerciseId })
-                Text("Remind me", style = MaterialTheme.typography.titleSmall)
+                Question("Reminder", "How early you'll get a reminder.")
                 ListRow("${et.leadMinutes} minutes before", onClick = { leadDialog = et.exerciseId })
             }
         }
-        Hint("Want help choosing? Link your calendar in Settings and we can suggest times when you are free.")
+        Hint("Change these any time in Settings > Notifications.")
+        Hint("To get suggested times when you're free, link your calendar in Settings > Calendar.")
         timeDialog?.let { id ->
             TimeDialog(edited.first { it.exerciseId == id }.time, { timeDialog = null }) { t -> edited = edited.map { if (it.exerciseId == id) it.copy(time = t) else it }; timeDialog = null }
         }
         leadDialog?.let { id ->
-            ChoiceDialog("Remind me", listOf(5, 10, 15, 30, 60).map { it.toString() to "$it minutes before" }, edited.first { it.exerciseId == id }.leadMinutes.toString(),
-                { v -> edited = edited.map { if (it.exerciseId == id) it.copy(leadMinutes = v.toInt()) else it }; leadDialog = null }, { leadDialog = null })
+            ChoiceDialog("Remind me", LEAD_OPTIONS, edited.first { it.exerciseId == id }.leadMinutes.toString(),
+                { v -> edited = edited.map { if (it.exerciseId == id) it.copy(leadMinutes = v.toInt()) else it }; leadDialog = null }, { leadDialog = null }, LEAD_DESCRIPTIONS)
         }
     }
 }

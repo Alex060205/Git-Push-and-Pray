@@ -77,7 +77,7 @@ object AdaptivePlanCompiler {
             ),
 
             "blockers" to array(
-                obj("question" to string())
+                obj("question" to string(), "label" to string())
             ),
 
             "incompleteInstructions" to string(),
@@ -124,6 +124,8 @@ object AdaptivePlanCompiler {
               belong in blockers.
             - Each blocker.question asks whether a condition explicitly
               named in the source is present.
+            - Each blocker.label is a plain 2-4 word title for its question
+              that adds or drops no meaning (e.g. "Pain stayed higher").
             - Persistent or repeated worsening may remain an explicit
               patient/clinician-reported condition. Do not invent a
               numeric definition for those words.
@@ -234,6 +236,7 @@ object AdaptivePlanCompiler {
         val progression = root.getJSONObject("progression")
 
         val questions = linkedMapOf<String, String>()
+        val titles = linkedMapOf<String, String>()
 
         fun safety(
             level: StopLevel
@@ -249,6 +252,7 @@ object AdaptivePlanCompiler {
 
                 val id = "safety_$ruleIndex"
                 questions[id] = rule.trigger
+                titles[id] = rule.summary?.takeIf { it.isNotBlank() } ?: level.questionTitle
 
                 SignalRule(
                     id = id,
@@ -265,6 +269,7 @@ object AdaptivePlanCompiler {
             .mapIndexed { blockerIndex, item ->
                 val id = "blocker_$blockerIndex"
                 questions[id] = item.text("question")
+                titles[id] = item.optString("label").trim().ifBlank { "Before you increase" }
                 id
             }
             .toSet()
@@ -370,7 +375,8 @@ object AdaptivePlanCompiler {
         return CompiledExercise(
             sourceIndex = index,
             plan = plan,
-            questions = questions
+            questions = questions,
+            questionTitles = titles
         )
     }
 

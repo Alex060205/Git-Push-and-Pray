@@ -9,7 +9,9 @@ import java.time.LocalDate
 data class CompiledExercise(
     val sourceIndex: Int,
     val plan: ExercisePrescription,
-    val questions: Map<String, String>
+    val questions: Map<String, String>,
+    /** Short bold title per question id. Nullable: programs saved before titles existed load it as null. */
+    val questionTitles: Map<String, String>? = null
 )
 
 data class PreparedProgram(

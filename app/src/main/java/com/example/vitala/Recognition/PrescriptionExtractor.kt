@@ -227,7 +227,7 @@ class PrescriptionExtractor(
         },
         trackingInstructions = o.strings("trackingInstructions"),
         stopRules = o.objects("stopRules")
-            .map { s -> StopRule(StopLevel.fromWire(s.str("level")), s.str("trigger")) }
+            .map { s -> StopRule(StopLevel.fromWire(s.str("level")), s.str("trigger"), s.str("summary").ifBlank { null }) }
             .filter { it.trigger.isNotEmpty() }
             .sortedBy { it.level.ordinal },
         generalPrecautions = o.strings("generalPrecautions"),
@@ -265,7 +265,7 @@ class PrescriptionExtractor(
         )
         val PHASE = obj("period" to str(), "dose" to str(), "frequency" to str(), "note" to str())
         val RULE = obj("label" to str(), "condition" to str(), "action" to str())
-        val STOP = obj("level" to str(), "trigger" to str())
+        val STOP = obj("level" to str(), "trigger" to str(), "summary" to str())
 
         val SCHEMA: JSONObject = obj(
             "programName" to str(), "bodyArea" to str(), "clinicalContext" to str(),
@@ -374,6 +374,9 @@ class PrescriptionExtractor(
                 "contact_team" (contact the clinician before continuing or progressing),
                 "pause" (pause or ease off the session).
               If unsure between two levels, choose the more urgent one.
+              summary: a plain 2-4 word label for the trigger, shown above it as a
+              title (e.g. "Numbness or hand changes", "Flare into next day"). It
+              must not add or drop meaning; the full trigger is still copied above.
             - generalPrecautions: other warnings for the whole program, including
               conditions that mean "do not progress" (e.g. "do not increase if
               swelling is worse").

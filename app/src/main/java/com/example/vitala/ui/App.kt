@@ -26,6 +26,7 @@ import androidx.compose.material3.Icon
 import androidx.compose.material3.MaterialTheme
 import androidx.compose.material3.Text
 import androidx.compose.runtime.Composable
+import androidx.compose.runtime.CompositionLocalProvider
 import androidx.compose.runtime.LaunchedEffect
 import androidx.compose.runtime.collectAsState
 import androidx.compose.runtime.getValue
@@ -85,6 +86,19 @@ fun VitalaApp(openRequest: String?, onOpenHandled: () -> Unit, vm: AppViewModel 
 @Composable
 private fun Route(s: AppState, vm: AppViewModel) {
     val bar: @Composable () -> Unit = { TabBar(s.tab, vm::selectTab) }
+    // Pages you browse to from a tab keep the tab bar. Flows and edit forms don't, so unsaved work isn't lost.
+    val keepsTabBar = when (s.screen) {
+        is Screen.ExerciseDetail, Screen.InsightsMonth, is Screen.DayDetail, Screen.ExportPdf,
+        is Screen.PlanHistory, is Screen.PlanVersionView, is Screen.PlanPhotos, is Screen.PlanItemDetail,
+        Screen.Conditions, Screen.Medicines, Screen.Notifications, Screen.Calendar, Screen.TextSize, Screen.Account -> true
+        else -> false
+    }
+    val noBar: @Composable () -> Unit = {}
+    CompositionLocalProvider(LocalTabBar provides if (keepsTabBar) bar else noBar) { RouteScreen(s, vm, bar) }
+}
+
+@Composable
+private fun RouteScreen(s: AppState, vm: AppViewModel, bar: @Composable () -> Unit) {
     when (val sc = s.screen) {
         is Screen.TabRoot -> when (sc.tab) {
             Tab.HOME -> HomeScreen(s, vm, bar)

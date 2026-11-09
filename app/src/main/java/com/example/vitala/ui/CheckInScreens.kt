@@ -56,16 +56,14 @@ fun CheckInScreen(s: AppState, vm: AppViewModel, step: Int) {
         "interference" -> common("Daily activities", "How much did pain get in the way of your usual activities over the past 24 hours?", d.interference != null) {
             NumberGrid(d.interference, { v -> vm.updateDraft { copy(interference = v) } }, "0 = Not at all", "10 = Completely stopped me")
         }
-        "recovery" -> common("Is your pain back to normal for you?", "Normal means the level you and your clinician agreed is OK.", d.recovery != null && (d.recovery != RecoveryStatus.RETURNED || d.recoveryTime != null)) {
-            OptionCard(d.recovery == RecoveryStatus.RETURNED, "Yes, back to normal", { vm.updateDraft { copy(recovery = RecoveryStatus.RETURNED) } })
-            OptionCard(d.recovery == RecoveryStatus.STILL_ABOVE, "Still more than normal", { vm.updateDraft { copy(recovery = RecoveryStatus.STILL_ABOVE, recoveryTime = null) } })
-            OptionCard(d.recovery == RecoveryStatus.UNSURE, "Not sure", { vm.updateDraft { copy(recovery = RecoveryStatus.UNSURE, recoveryTime = null) } })
+        "recovery" -> common("Back to normal?", "Is your pain back to the level you and your clinician agreed is OK?", d.recovery != null && (d.recovery != RecoveryStatus.RETURNED || d.recoveryTime != null)) {
+            OptionCard(d.recovery == RecoveryStatus.RETURNED, "Back to normal", { vm.updateDraft { copy(recovery = RecoveryStatus.RETURNED) } }, "My pain has settled to its usual level.")
+            OptionCard(d.recovery == RecoveryStatus.STILL_ABOVE, "Still higher", { vm.updateDraft { copy(recovery = RecoveryStatus.STILL_ABOVE, recoveryTime = null) } }, "My pain is still above its usual level.")
+            OptionCard(d.recovery == RecoveryStatus.UNSURE, "Not sure", { vm.updateDraft { copy(recovery = RecoveryStatus.UNSURE, recoveryTime = null) } }, "I can't tell yet.")
             if (d.recovery == RecoveryStatus.RETURNED) {
-                Text("When did it settle?", style = MaterialTheme.typography.titleSmall)
-                ChipRow {
-                    listOf(RecoveryTime.SAME_DAY to "Same day", RecoveryTime.NEXT_DAY to "Next day", RecoveryTime.LATER to "Later").forEach { (v, t) ->
-                        ChoiceChip(d.recoveryTime == v, t, { vm.updateDraft { copy(recoveryTime = v) } }, Modifier.weight(1f))
-                    }
+                Question("When it settled", "When your pain got back to its usual level.")
+                RECOVERY_TIMES.forEach { (v, t, desc) ->
+                    OptionCard(d.recoveryTime == v, t, { vm.updateDraft { copy(recoveryTime = v) } }, desc)
                 }
             }
         }
@@ -81,7 +79,7 @@ fun CheckInScreen(s: AppState, vm: AppViewModel, step: Int) {
             ) { ExerciseLogContent(s, vm); Busy(s.busy); ErrorText(s.error) }
         }
         else -> Page(
-            title = "Anything different lately?", subtitle = "Tick any that apply. This helps explain your numbers.",
+            title = "Recent changes", subtitle = "Tick anything that's been different lately. It helps explain changes in your scores.",
             onBack = vm::back, topRight = "Question ${step + 1} of $total", steps = (step + 1) to total,
             actions = { PrimaryButton("Finish check-in", { vm.saveCheckIn() }, enabled = !s.busy) }
         ) {
@@ -110,13 +108,12 @@ fun CheckInDoneScreen(s: AppState, vm: AppViewModel) {
                 lines.forEach { l ->
                     val (name, time, dose, note) = l.split("|").let { it + List(4 - it.size) { "" } }
                     Text("$name · ${fmtClock(time)}")
-                    if (dose.isNotBlank()) Text("Starts at $dose", color = GreenDark, style = MaterialTheme.typography.titleSmall)
+                    if (dose.isNotBlank()) Text(dose, color = GreenDark, style = MaterialTheme.typography.titleSmall)
                     if (note.isNotBlank()) Hint(note)
                 }
-                Text("We confirm your time after you rate your pain.", style = MaterialTheme.typography.bodySmall)
             }
         }
-        Hint("You can always choose a different level from your clinician's plan.")
+        Hint("You can pick any level your clinician's plan allows.")
     }
 }
 
