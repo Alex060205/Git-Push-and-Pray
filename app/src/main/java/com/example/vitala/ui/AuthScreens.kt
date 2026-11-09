@@ -33,7 +33,7 @@ fun AuthScreen(s: AppState, vm: AppViewModel) {
     val canGo = email.isNotBlank() && password.length >= 6 && (!creating || agree) && !s.busy
     Page(
         title = if (creating) "Create your account" else "Welcome back",
-        subtitle = if (creating) "Your plan, one clear step a day." else "Sign in to see today's plan.",
+        subtitle = if (creating) "Follow your clinician's exercise plan, day by day." else "Sign in to see today's plan.",
         actions = {
             PrimaryButton(if (creating) "Create account" else "Sign in", { if (creating) vm.signUp(email, password) else vm.signIn(email, password) }, enabled = canGo)
             LinkButton(if (creating) "I already have an account" else "Create an account", { creating = !creating })
@@ -51,7 +51,7 @@ fun AuthScreen(s: AppState, vm: AppViewModel) {
                 Hint("We only keep what the app needs: your answers, your plan and your medicines. They are encrypted while stored and sent. " +
                         "We show no ads. You can export or delete everything in Settings. This app supports your clinician's plan; it does not diagnose or treat.")
             }
-            CheckCard(agree, "I understand and agree", { agree = it })
+            CheckCard(agree, "I agree", { agree = it }, "I've read how my information is used and agree to it.")
         }
         Busy(s.busy)
         ErrorText(s.error)
@@ -66,7 +66,7 @@ fun AboutYouScreen(s: AppState, vm: AppViewModel, onboarding: Boolean) {
     var provider by remember { mutableStateOf(s.profile.medicalProvider) }
     Page(
         title = if (onboarding) "About you" else "Edit my details",
-        subtitle = if (onboarding) "Just a few details to get started." else null,
+        subtitle = if (onboarding) "Your name, and your provider if you want to add one." else null,
         steps = if (onboarding) 1 to 2 else null,
         onBack = if (onboarding) null else vm::back,
         topRight = if (onboarding) "Step 1 of 2" else null,
@@ -93,14 +93,14 @@ fun SetupDayScreen(s: AppState, vm: AppViewModel) {
         Triple("Height", s.profile.heightCm?.let { "${it.toInt()} cm" } ?: "Add", "height"),
         Triple("Weight", s.profile.weightKg?.let { "%.1f kg".format(it) } ?: "Add", "weight"),
         Triple("Exercise time", fmtClock(st.usualExerciseTime), "exercise"),
-        Triple("Remind me", "${st.leadMinutes} min before", "lead"),
+        Triple("Exercise reminder", "${st.leadMinutes} min before", "lead"),
         Triple("Daily check-in", fmtClock(st.checkInTime), "daily"),
         Triple("Weekly check-in", DayOfWeek.of(st.weeklyDay).getDisplayName(TextStyle.SHORT, Locale.getDefault()) + " " + fmtClock(st.weeklyTime), "weekly"),
         Triple("Quiet hours", "${fmtClock(st.quietStart)} to ${fmtClock(st.quietEnd)}", "quiet")
     )
     Page(
         title = "Set up your day",
-        subtitle = "These are filled in for you. Change any now or later in Settings.",
+        subtitle = "We've filled in defaults. Tap any to change it, now or later in Settings.",
         steps = 2 to 2, onBack = { vm.setOnboardingStep(0) }, topRight = "Step 2 of 2",
         actions = { PrimaryButton("Next", { vm.setOnboardingStep(2, Screen.AddCondition(true)) }) }
     ) {
@@ -110,11 +110,12 @@ fun SetupDayScreen(s: AppState, vm: AppViewModel) {
             })
         }
         when (dialog) {
-            "text" -> ChoiceDialog("Text size", TextSizeChoice.entries.map { it.name to it.label }, st.textSize, { v -> vm.saveSettings { copy(textSize = v) }; dialog = null }, { dialog = null })
+            "text" -> ChoiceDialog("Text size", TextSizeChoice.entries.map { it.name to it.label }, st.textSize, { v -> vm.saveSettings { copy(textSize = v) }; dialog = null }, { dialog = null },
+                TextSizeChoice.entries.associate { it.name to it.description })
             "height" -> NumberDialog("Height", "cm", s.profile.heightCm?.toInt()?.toString().orEmpty(), { vm.saveHealth(it, null); dialog = null }, { dialog = null })
             "weight" -> NumberDialog("Weight", "kg", s.profile.weightKg?.toString().orEmpty(), { vm.saveHealth(null, it); dialog = null }, { dialog = null })
             "exercise" -> TimeDialog(st.usualExerciseTime, { dialog = null }, { t -> vm.saveSettings { copy(usualExerciseTime = t) }; dialog = null })
-            "lead" -> ChoiceDialog("Remind me", listOf(5, 10, 15, 30, 60).map { it.toString() to "$it minutes before" }, st.leadMinutes.toString(), { v -> vm.saveSettings { copy(leadMinutes = v.toInt()) }; dialog = null }, { dialog = null })
+            "lead" -> ChoiceDialog("Remind me", LEAD_OPTIONS, st.leadMinutes.toString(), { v -> vm.saveSettings { copy(leadMinutes = v.toInt()) }; dialog = null }, { dialog = null }, LEAD_DESCRIPTIONS)
             "daily" -> TimeDialog(st.checkInTime, { dialog = null }, { t -> vm.saveSettings { copy(checkInTime = t) }; dialog = null })
             "weekly" -> WeeklyDialog(st.weeklyDay, st.weeklyTime, { d, t -> vm.saveSettings { copy(weeklyDay = d, weeklyTime = t) }; dialog = null }, { dialog = null })
             "quiet" -> QuietDialog(st.quietStart, st.quietEnd, { a, b -> vm.saveSettings { copy(quietStart = a, quietEnd = b, quietOn = true) }; dialog = null }, { dialog = null })
@@ -126,7 +127,8 @@ fun SetupDayScreen(s: AppState, vm: AppViewModel) {
 fun WeeklyDialog(day: Int, time: String, onConfirm: (Int, String) -> Unit, onDismiss: () -> Unit) {
     var step by remember { mutableStateOf(0) }
     var d by remember { mutableStateOf(day) }
-    if (step == 0) ChoiceDialog("Which day?", DayOfWeek.entries.map { it.value.toString() to it.getDisplayName(TextStyle.FULL, Locale.getDefault()) }, d.toString(), { d = it.toInt(); step = 1 }, onDismiss)
+    if (step == 0) ChoiceDialog("Which day?", DayOfWeek.entries.map { it.value.toString() to it.getDisplayName(TextStyle.FULL, Locale.getDefault()) }, d.toString(), { d = it.toInt(); step = 1 }, onDismiss,
+        DayOfWeek.entries.associate { it.value.toString() to "Your weekly check-in every ${it.getDisplayName(TextStyle.FULL, Locale.getDefault())}." })
     else TimeDialog(time, onDismiss, { t -> onConfirm(d, t) })
 }
 

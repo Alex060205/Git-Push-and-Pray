@@ -215,6 +215,7 @@ class AppViewModel(app: Application) : AndroidViewModel(app) {
             open.startsWith("exercise:") -> resetToTab(Tab.HOME, Screen.ExerciseReminder(open.removePrefix("exercise:")))
             open == "checkin" -> resetToTab(Tab.HOME, Screen.CheckIn(0))
             open == "weekly" -> resetToTab(Tab.HOME, Screen.Weekly(0))
+            open == "notifications" -> resetToTab(Tab.SETTINGS, Screen.Notifications)
         }
     }
 
@@ -559,8 +560,21 @@ class AppViewModel(app: Application) : AndroidViewModel(app) {
     fun sessionsToday(): List<Pair<String, List<TodayItem>>> =
         todayItems().groupBy { timeFor(it) }.toSortedMap().map { it.key to it.value }
 
-    fun safetyQuestions(): List<String> =
-        todayItems().flatMap { it.compiled.questions.values }.distinct()
+    /** Today's safety questions as (short title, the plan's exact wording). The wording is the key that gets submitted. */
+    fun safetyQuestions(): List<Pair<String, String>> =
+        todayItems().flatMap { item ->
+            val source = s.programs[item.plan.id]?.source
+            item.compiled.questions.map { (id, text) -> questionTitle(item.compiled, source, id) to text }
+        }.distinctBy { it.second }
+
+    private fun questionTitle(c: CompiledExercise, source: com.example.vitala.Recognition.ExercisePrescription?, id: String): String {
+        c.questionTitles?.get(id)?.takeIf { it.isNotBlank() }?.let { return it }
+        if (id.startsWith("safety_")) {
+            val rule = id.removePrefix("safety_").toIntOrNull()?.let { source?.stopRules?.getOrNull(it) }
+            if (rule != null) return rule.summary?.takeIf { it.isNotBlank() } ?: rule.level.questionTitle
+        }
+        return "Before you increase"
+    }
 
     fun snoozeMedicine(medId: String, time: String) {
         logMed(medId, time, MedAction.SNOOZED)
@@ -632,10 +646,10 @@ class AppViewModel(app: Application) : AndroidViewModel(app) {
             "PARTIAL_SESSION" -> "Yesterday's session was shorter than planned, so your time stays at $doseText."
             "INCOMPLETE_PREVIOUS_COMPARISON" ->
                 "We don't have yesterday's pain and time, so your time stays at $doseText. A missing answer is never counted as zero."
-            "PROGRESSION_BLOCKED" -> "Something on your plan's list is present today, so your time stays at $doseText."
+            "PROGRESSION_BLOCKED" -> "You reported a sign on your plan that stops increases, so your time stays at $doseText."
             "INCREASE_INTERVAL", "INSUFFICIENT_CURRENT_DOSE_HISTORY", "INSUFFICIENT_CONSECUTIVE_EVIDENCE",
             "FOLLOWING_DAY_RESPONSE", "HISTORICAL_SYMPTOM_EVIDENCE" ->
-                "Your pain before exercise is ${painNote(pain, yesterdayPain)}, so your time stays at $doseText until your plan's steady-sessions rule is met."
+                "Your pain before exercise is ${painNote(pain, yesterdayPain)}, so your time stays at $doseText until you've had the number of steady sessions your plan requires."
             "WEEKLY_CEILING" -> "Your pain today ($pain) ${yesterdayPain?.let { if (pain == it) "is the same as yesterday ($it)" else "is $pain" } ?: "is $pain"}, " +
                     "so your time stays at $doseText. This is the most your plan allows this week."
             "PROGRESSION" -> "Your recent sessions went steadily, and your plan allows $doseText today."
@@ -789,7 +803,7 @@ class AppViewModel(app: Application) : AndroidViewModel(app) {
         edit { copy(day = nd) }
         store.put(uid, "days", nd.date, nd)
         saveSessionDoc(nd, level, l.symptom, l.stopReason, l.newSymptoms, anyShort, anyMore, allMissed)
-        edit { copy(message = if (allMissed) "Saved. Nothing to make up." else "Session saved") }
+        edit { copy(message = if (allMissed) "Saved. You don't need to make up missed sessions." else "Session saved") }
         onDone()
     }
 
@@ -1020,15 +1034,15 @@ class AppViewModel(app: Application) : AndroidViewModel(app) {
                     specs += ReminderSpec(
                         key = "med-${m.id}-$t", kind = ReminderKind.MEDICINE.name,
                         title = if (st.showMedNames) "Time for ${m.name}" else "Time for your medicine",
-                        body = if (st.showMedNames) listOf(m.dose, m.instructions).filter { it.isNotBlank() }.joinToString(" · ") else "Open the app for details.",
+                        body = if (st.showMedNames) listOf(m.dose, m.instructions).filter { it.isNotBlank() }.joinToString(" · ") else "Open the app to see which medicine.",
                         time = t, important = m.important, medId = m.id, medTime = t,
                         privateTitle = "Time for your medicine"
                     )
                 }
             }
         }
-        if (st.checkInRemindersOn) specs += ReminderSpec("checkin", ReminderKind.CHECKIN.name, "Daily check-in", "About 3 minutes.", st.checkInTime)
-        if (st.weeklyOn) specs += ReminderSpec("weekly", ReminderKind.WEEKLY.name, "Weekly check-in", "3 quick questions, about 1 minute.", st.weeklyTime, weekday = st.weeklyDay)
+        if (st.checkInRemindersOn) specs += ReminderSpec("checkin", ReminderKind.CHECKIN.name, "Daily check-in", "Rate your pain and tiredness. About 3 minutes.", st.checkInTime)
+        if (st.weeklyOn) specs += ReminderSpec("weekly", ReminderKind.WEEKLY.name, "Weekly check-in", "3 questions about your past week. About 1 minute.", st.weeklyTime, weekday = st.weeklyDay)
         Reminders.createChannels(context)
         Reminders.scheduleAll(context, specs, quiet())
     }

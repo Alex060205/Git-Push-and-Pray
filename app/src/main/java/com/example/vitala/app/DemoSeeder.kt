@@ -63,7 +63,7 @@ class DemoSeeder(private val backend: LocalBackend) {
         val exId = "$PROGRAM_ID-0"
         val source = source(start)
         val plan = plan(exId, start, source)
-        val prepared = PreparedProgram(PROGRAM_ID, source, listOf(CompiledExercise(0, plan, questions(source))))
+        val prepared = PreparedProgram(PROGRAM_ID, source, listOf(CompiledExercise(0, plan, questions(source), titles(source))))
         val allFalse = (questions(source).keys).associateWith { false }
         val state = ExerciseState(exId, ExerciseDose(DoseDimension.MINUTES, 2.0), doseEffectiveFrom = start.plusDays(5), lastIncreaseDate = start.plusDays(5))
         val reports = mutableListOf<ExerciseDay>()
@@ -123,6 +123,11 @@ class DemoSeeder(private val backend: LocalBackend) {
         ))
     }
 
+    private fun titles(source: Scanned): Map<String, String> = linkedMapOf<String, String>().also { t ->
+        source.stopRules.forEachIndexed { i, r -> t["safety_$i"] = r.summary ?: r.level.questionTitle }
+        t["blocker_0"] = "Pain stayed higher"
+    }
+
     private fun questions(source: Scanned): Map<String, String> = linkedMapOf<String, String>().also { q ->
         source.stopRules.forEachIndexed { i, r -> q["safety_$i"] = r.trigger }
         q["blocker_0"] = "Did your pain stay higher than usual after your last session?"
@@ -167,10 +172,10 @@ class DemoSeeder(private val backend: LocalBackend) {
         ),
         trackingInstructions = listOf("Before each session: familiar hand or wrist pain 0 to 10.", "After each session: the time actually completed."),
         stopRules = listOf(
-            StopRule(StopLevel.URGENT_CARE, "sudden significant weakness, a cold or pale hand, or severe rapidly worsening symptoms"),
-            StopRule(StopLevel.STOP_AND_SEEK_ASSESSMENT, "new or worsening numbness, persistent tingling, loss of hand strength, dropping objects, marked swelling, or a change in hand colour or temperature"),
-            StopRule(StopLevel.CONTACT_TEAM, "a flare continues into the following day, pain keeps rising despite reductions, or you are repeatedly unable to complete the minimum session"),
-            StopRule(StopLevel.PAUSE, "discomfort keeps building, feels substantially different from usual symptoms, or does not settle with a short rest")
+            StopRule(StopLevel.URGENT_CARE, "sudden significant weakness, a cold or pale hand, or severe rapidly worsening symptoms", "Sudden severe changes"),
+            StopRule(StopLevel.STOP_AND_SEEK_ASSESSMENT, "new or worsening numbness, persistent tingling, loss of hand strength, dropping objects, marked swelling, or a change in hand colour or temperature", "Numbness or hand changes"),
+            StopRule(StopLevel.CONTACT_TEAM, "a flare continues into the following day, pain keeps rising despite reductions, or you are repeatedly unable to complete the minimum session", "Flare that won't settle"),
+            StopRule(StopLevel.PAUSE, "discomfort keeps building, feels substantially different from usual symptoms, or does not settle with a short rest", "Building discomfort")
         ),
         generalPrecautions = listOf("Some familiar discomfort may occur. A temporary increase in familiar pain does not by itself mean the tissue has been damaged."),
         otherNotes = emptyList(),

@@ -64,15 +64,77 @@ object Reminders {
     const val EXTRA_OPEN = "open"
     private val gson = Gson()
 
+    // Channel importance can't be raised once a channel exists, so the high-importance
+    // channels (pop up on screen) use new ids and the old default-importance ones are removed.
+    private const val CH_EXERCISE = "exercise_alert"
+    private const val CH_MEDICINE = "medicine_alert"
+    private const val CH_CHECKIN = "checkin_alert"
+    private val OLD_CHANNELS = listOf("exercise", "medicine", "checkin")
+    private const val TEST_KEY = "test"
+    private const val TEST_ID = 7_000_001
+
     fun createChannels(ctx: Context) {
         if (Build.VERSION.SDK_INT < 26) return
         val nm = ctx.getSystemService(NotificationManager::class.java)
+        OLD_CHANNELS.forEach { nm.deleteNotificationChannel(it) }
         listOf(
-            "exercise" to "Exercise reminders", "medicine" to "Medicine reminders",
-            "checkin" to "Check-in reminders"
+            CH_EXERCISE to "Exercise reminders", CH_MEDICINE to "Medicine reminders",
+            CH_CHECKIN to "Check-in reminders"
         ).forEach { (id, name) ->
-            nm.createNotificationChannel(NotificationChannel(id, name, NotificationManager.IMPORTANCE_DEFAULT))
+            nm.createNotificationChannel(NotificationChannel(id, name, NotificationManager.IMPORTANCE_HIGH))
         }
+    }
+
+    /** False when notifications are blocked for the app (permission denied or turned off in system settings). */
+    fun notificationsAllowed(ctx: Context): Boolean = NotificationManagerCompat.from(ctx).areNotificationsEnabled()
+
+    /** False when one of the reminder channels was switched off in system settings. */
+    fun channelsAllowed(ctx: Context): Boolean {
+        if (Build.VERSION.SDK_INT < 26) return true
+        val nm = ctx.getSystemService(NotificationManager::class.java)
+        return listOf(CH_EXERCISE, CH_MEDICINE, CH_CHECKIN).all {
+            (nm.getNotificationChannel(it)?.importance ?: NotificationManager.IMPORTANCE_HIGH) != NotificationManager.IMPORTANCE_NONE
+        }
+    }
+
+    /** Exact alarms ring on time; without the permission Android may deliver a reminder up to an hour late. */
+    fun canRingOnTime(ctx: Context): Boolean =
+        Build.VERSION.SDK_INT < 31 || ctx.getSystemService(AlarmManager::class.java).canScheduleExactAlarms()
+
+    /** Rings at [at] (epoch ms): exactly when allowed, otherwise as close as Android permits. */
+    private fun setAlarm(ctx: Context, at: Long, op: PendingIntent) {
+        val am = ctx.getSystemService(AlarmManager::class.java)
+        if (canRingOnTime(ctx)) {
+            try {
+                am.setExactAndAllowWhileIdle(AlarmManager.RTC_WAKEUP, at, op); return
+            } catch (_: SecurityException) { /* permission revoked in between: fall back */ }
+        }
+        am.setAndAllowWhileIdle(AlarmManager.RTC_WAKEUP, at, op)
+    }
+
+    /** Shows a sample reminder right now. Returns false if the system blocks it. */
+    fun sendTestNow(ctx: Context): Boolean {
+        createChannels(ctx)
+        if (!notificationsAllowed(ctx)) return false
+        val open = Intent(ctx, MainActivity::class.java)
+            .addFlags(Intent.FLAG_ACTIVITY_NEW_TASK or Intent.FLAG_ACTIVITY_SINGLE_TOP)
+            .putExtra(EXTRA_OPEN, "notifications")
+        val pi = PendingIntent.getActivity(ctx, TEST_ID, open, PendingIntent.FLAG_UPDATE_CURRENT or PendingIntent.FLAG_IMMUTABLE)
+        val n = NotificationCompat.Builder(ctx, CH_CHECKIN)
+            .setSmallIcon(android.R.drawable.ic_popup_reminder)
+            .setContentTitle("Test reminder")
+            .setContentText("Reminders are working. Your real reminders will look like this.")
+            .setPriority(NotificationCompat.PRIORITY_HIGH)
+            .setCategory(NotificationCompat.CATEGORY_REMINDER)
+            .setAutoCancel(true)
+            .setContentIntent(pi)
+            .build()
+        return try { NotificationManagerCompat.from(ctx).notify(TEST_ID, n); true } catch (_: SecurityException) { false }
+    }
+
+    /** Schedules a sample reminder [seconds] from now through the same alarm path as real reminders. */
+    fun sendTestLater(ctx: Context, seconds: Int) {
+        setAlarm(ctx, System.currentTimeMillis() + seconds * 1000L, pending(ctx, TEST_KEY, ACTION_FIRE))
     }
 
     fun scheduleAll(ctx: Context, specs: List<ReminderSpec>, quiet: QuietHours) {
@@ -118,15 +180,13 @@ object Reminders {
 
     private fun scheduleNext(ctx: Context, spec: ReminderSpec) {
         val at = nextTrigger(spec).atZone(ZoneId.systemDefault()).toInstant().toEpochMilli()
-        val am = ctx.getSystemService(AlarmManager::class.java)
-        am.setAndAllowWhileIdle(AlarmManager.RTC_WAKEUP, at, pending(ctx, spec.key, ACTION_FIRE))
+        setAlarm(ctx, at, pending(ctx, spec.key, ACTION_FIRE))
     }
 
     /** "Remind me in 15 minutes" from inside the app. */
     fun snoozeKey(ctx: Context, key: String) {
         val at = System.currentTimeMillis() + 15 * 60_000L
-        ctx.getSystemService(AlarmManager::class.java)
-            .setAndAllowWhileIdle(AlarmManager.RTC_WAKEUP, at, pending(ctx, "$key-snooze", ACTION_FIRE))
+        setAlarm(ctx, at, pending(ctx, "$key-snooze", ACTION_FIRE))
     }
 
     private fun cancel(ctx: Context, key: String) {
@@ -150,6 +210,7 @@ object Reminders {
 
     fun handle(ctx: Context, intent: Intent) {
         val key = intent.getStringExtra(EXTRA_KEY) ?: return
+        if (key == TEST_KEY) { if (intent.action == ACTION_FIRE) sendTestNow(ctx); return }
         val baseKey = key.removeSuffix("-snooze")
         val spec = loadSpecs(ctx).firstOrNull { it.key == baseKey }
         when (intent.action) {
@@ -164,8 +225,7 @@ object Reminders {
                 NotificationManagerCompat.from(ctx).cancel(baseKey.hashCode())
                 if (spec == null) return
                 val at = System.currentTimeMillis() + 15 * 60_000L
-                ctx.getSystemService(AlarmManager::class.java)
-                    .setAndAllowWhileIdle(AlarmManager.RTC_WAKEUP, at, pending(ctx, "$baseKey-snooze", ACTION_FIRE))
+                setAlarm(ctx, at, pending(ctx, "$baseKey-snooze", ACTION_FIRE))
                 logMed(spec, MedAction.SNOOZED)
             }
             ACTION_TOOK, ACTION_SKIP -> {
@@ -185,12 +245,14 @@ object Reminders {
 
     private fun show(ctx: Context, spec: ReminderSpec, nudged: Boolean) {
         val kind = ReminderKind.valueOf(spec.kind)
-        val channel = when (kind) { ReminderKind.EXERCISE -> "exercise"; ReminderKind.MEDICINE -> "medicine"; else -> "checkin" }
+        val channel = when (kind) { ReminderKind.EXERCISE -> CH_EXERCISE; ReminderKind.MEDICINE -> CH_MEDICINE; else -> CH_CHECKIN }
         val id = spec.key.hashCode()
         val b = NotificationCompat.Builder(ctx, channel)
             .setSmallIcon(android.R.drawable.ic_popup_reminder)
             .setContentTitle(spec.title)
             .setContentText(spec.body)
+            .setPriority(NotificationCompat.PRIORITY_HIGH)
+            .setCategory(NotificationCompat.CATEGORY_REMINDER)
             .setAutoCancel(true)
             .setContentIntent(openIntent(ctx, spec, id))
         if (spec.privateTitle != null) {
@@ -214,7 +276,9 @@ object Reminders {
             }
             else -> b.addAction(0, "Open", openIntent(ctx, spec, id + 2))
         }
-        runCatching { NotificationManagerCompat.from(ctx).notify(id, b.build()) }   // fails quietly if permission is off
+        try {
+            NotificationManagerCompat.from(ctx).notify(id, b.build())
+        } catch (_: SecurityException) { /* permission is off: the Notifications screen shows how to turn it on */ }
     }
 }
 

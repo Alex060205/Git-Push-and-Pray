@@ -88,6 +88,9 @@ fun AccentBar() {
     }
 }
 
+/** Tab bar for pages opened from a tab; empty inside flows so a tap can't drop unsaved work. */
+val LocalTabBar = androidx.compose.runtime.staticCompositionLocalOf<@Composable () -> Unit> { {} }
+
 /**
  * Standard screen: accent bar, optional back row, scrolling body, and pinned buttons at the bottom.
  * One decision per screen: put the single main action in [actions].
@@ -99,7 +102,7 @@ fun Page(
     onBack: (() -> Unit)? = null,
     topRight: String? = null,
     steps: Pair<Int, Int>? = null,
-    bottomBar: @Composable () -> Unit = {},
+    bottomBar: @Composable () -> Unit = LocalTabBar.current,
     actions: @Composable ColumnScope.() -> Unit = {},
     content: @Composable ColumnScope.() -> Unit
 ) {
@@ -244,6 +247,15 @@ fun SectionLabel(text: String) {
         fontWeight = FontWeight.Bold, modifier = Modifier.padding(top = 6.dp).semantics { heading() })
 }
 
+/** An in-page question: short bold title, with the detail in a small line underneath. */
+@Composable
+fun Question(title: String, description: String? = null) {
+    Column(verticalArrangement = Arrangement.spacedBy(2.dp)) {
+        Text(title, style = MaterialTheme.typography.titleSmall, fontWeight = FontWeight.Bold, modifier = Modifier.semantics { heading() })
+        if (description != null) Text(description, style = MaterialTheme.typography.bodySmall, color = secondaryText())
+    }
+}
+
 @Composable
 fun Hint(text: String) = Text(text, color = secondaryText(), style = MaterialTheme.typography.bodySmall)
 
@@ -306,7 +318,7 @@ fun OptionCard(selected: Boolean, title: String, onClick: () -> Unit, subtitle: 
         RadioButton(selected = selected, onClick = null, modifier = Modifier.padding(8.dp))
         Column(Modifier.weight(1f)) {
             Row(verticalAlignment = Alignment.CenterVertically, horizontalArrangement = Arrangement.spacedBy(8.dp)) {
-                Text(title, style = MaterialTheme.typography.titleSmall, modifier = Modifier.weight(1f, fill = false))
+                Text(title, style = MaterialTheme.typography.titleSmall, fontWeight = FontWeight.Bold, modifier = Modifier.weight(1f, fill = false))
                 if (badge != null) Text(badge, color = Color.White, style = MaterialTheme.typography.labelMedium,
                     modifier = Modifier.clip(RoundedCornerShape(50)).background(actionColor()).padding(horizontal = 10.dp, vertical = 2.dp))
             }
@@ -327,7 +339,7 @@ fun CheckCard(checked: Boolean, title: String, onChange: (Boolean) -> Unit, subt
         Checkbox(checked = checked, onCheckedChange = null, modifier = Modifier.padding(8.dp),
             colors = CheckboxDefaults.colors(checkedColor = actionColor()))
         Column(Modifier.weight(1f)) {
-            Text(title, style = MaterialTheme.typography.titleSmall)
+            Text(title, style = MaterialTheme.typography.titleSmall, fontWeight = FontWeight.Bold)
             if (subtitle != null) Text(subtitle, style = MaterialTheme.typography.bodySmall, color = secondaryText())
         }
     }

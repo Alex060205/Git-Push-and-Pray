@@ -2,6 +2,19 @@ package com.example.vitala.ui
 
 import android.Manifest
 import android.content.Intent
+import android.content.pm.PackageManager
+import android.net.Uri
+import android.os.Build
+import android.provider.Settings
+import androidx.compose.material.icons.Icons
+import androidx.compose.material.icons.outlined.CheckCircle
+import androidx.compose.material.icons.outlined.NotificationsActive
+import androidx.compose.material.icons.outlined.Schedule
+import androidx.compose.material3.Icon
+import androidx.compose.ui.Alignment
+import androidx.core.content.ContextCompat
+import androidx.lifecycle.Lifecycle
+import androidx.lifecycle.compose.LifecycleEventEffect
 import androidx.activity.compose.rememberLauncherForActivityResult
 import androidx.activity.result.contract.ActivityResultContracts
 import androidx.compose.foundation.background
@@ -114,17 +127,17 @@ fun EditMedicineScreen(s: AppState, vm: AppViewModel, id: String?) {
         LabeledField("Name", m.name, { m = m.copy(name = it) }, placeholder = "Medicine name")
         LabeledField("How much", m.dose, { m = m.copy(dose = it) }, placeholder = "For example: 1 tablet")
         if (!m.asNeeded) {
-            Text("When do you take it?", style = MaterialTheme.typography.titleSmall)
+            Question("Times", "Add each time of day you take it.")
             val times = m.times.sorted()
             times.chunked(2).forEach { row -> ChipRow { row.forEach { t -> ChoiceChip(true, fmtClock(t), { m = m.copy(times = m.times - t) }, Modifier.weight(1f)) }; if (row.size == 1) androidx.compose.foundation.layout.Spacer(Modifier.weight(1f)) } }
             SecondaryButton("+ Add a time", { timeDialog = true })
             Hint("Tap a time to remove it.")
         }
         ToggleRow("Take with food", m.withFood, { m = m.copy(withFood = it) })
-        ToggleRow("Only when needed", m.asNeeded, { m = m.copy(asNeeded = it) })
+        ToggleRow("Only when needed", m.asNeeded, { m = m.copy(asNeeded = it) }, "No set times, so no reminders.")
         if (!m.asNeeded) {
             ToggleRow("Remind me", m.remindersOn, { m = m.copy(remindersOn = it) })
-            if (m.remindersOn) ToggleRow("Important", m.important, { m = m.copy(important = it) }, "May remind you during quiet hours.")
+            if (m.remindersOn) ToggleRow("Important", m.important, { m = m.copy(important = it) }, "Reminds you even during quiet hours.")
         }
         if (timeDialog) TimeDialog("08:00", { timeDialog = false }) { t -> m = m.copy(times = (m.times + t).distinct()); timeDialog = false }
         if (confirm) ConfirmDialog("Stop this medicine?", "Reminders stop. Your history is kept.", "Stop it", { vm.stopMedication(m.id); confirm = false; vm.back() }, { confirm = false }, destructive = true)
@@ -166,7 +179,8 @@ fun HealthScreen(s: AppState, vm: AppViewModel) {
                 SecondaryButton(if (s.profile.weightKg == null) "Add" else "Change", { dialog = "w" }, Modifier.width(130.dp))
             }
         }
-        Hint("Optional. Your clinician may ask for these. Change them when they change.")
+        Hint("Optional. Included in the PDF report for your clinician.")
+        Hint("Update them when they change.")
         when (dialog) {
             "h" -> NumberDialog("Height", "cm", s.profile.heightCm?.toInt()?.toString().orEmpty(), { vm.saveHealth(it, null); dialog = null }, { dialog = null })
             "w" -> NumberDialog("Weight", "kg", s.profile.weightKg?.toString().orEmpty(), { vm.saveHealth(null, it); dialog = null }, { dialog = null })
@@ -180,26 +194,128 @@ fun HealthScreen(s: AppState, vm: AppViewModel) {
 fun NotificationsScreen(s: AppState, vm: AppViewModel) {
     val st = s.settings
     var dialog by remember { mutableStateOf<String?>(null) }
-    Page(title = "Notifications", onBack = vm::back) {
-        ToggleRow("Exercise reminders", st.exerciseRemindersOn, { v -> vm.saveSettings { copy(exerciseRemindersOn = v) } }, "${st.leadMinutes} minutes before")
-        ListRow("Reminder lead time", "${st.leadMinutes} minutes before", { dialog = "lead" })
-        ListRow("Exercise times", s.settings.exerciseTimes.joinToString(", ") { "${it.exerciseName} · ${fmtClock(it.time)}" }.ifBlank { "Set after you save a plan" }, { vm.go(Screen.ReminderTimes(false, false)) })
-        ToggleRow("Medicine reminders", st.medRemindersOn, { v -> vm.saveSettings { copy(medRemindersOn = v) } }, "At the time you set")
-        ToggleRow("Show medicine names on the lock screen", st.showMedNames, { v -> vm.saveSettings { copy(showMedNames = v) } }, "Off: it just says \"Time for your medicine\".")
-        ToggleRow("Daily check-in", st.checkInRemindersOn, { v -> vm.saveSettings { copy(checkInRemindersOn = v) } }, "Every day at ${fmtClock(st.checkInTime)}")
-        ListRow("Daily check-in time", fmtClock(st.checkInTime), { dialog = "daily" })
-        ToggleRow("Weekly check-in", st.weeklyOn, { v -> vm.saveSettings { copy(weeklyOn = v) } }, "${DayOfWeek.of(st.weeklyDay).getDisplayName(TextStyle.FULL, Locale.getDefault())}s at ${fmtClock(st.weeklyTime)}")
-        ListRow("Weekly check-in day and time", "${DayOfWeek.of(st.weeklyDay).getDisplayName(TextStyle.SHORT, Locale.getDefault())} ${fmtClock(st.weeklyTime)}", { dialog = "weekly" })
-        ToggleRow("Quiet hours", st.quietOn, { v -> vm.saveSettings { copy(quietOn = v) } }, "${fmtClock(st.quietStart)} to ${fmtClock(st.quietEnd)}")
-        ListRow("Quiet hours times", "${fmtClock(st.quietStart)} to ${fmtClock(st.quietEnd)}", { dialog = "quiet" })
-        Hint("Medicines you mark as important can still remind you during quiet hours.")
+    Page(title = "Notifications", subtitle = "Choose which reminders you get and when.", onBack = vm::back) {
+        NotificationStatus(vm)
+
+        SectionLabel("Exercise")
+        ToggleRow("Exercise reminders", st.exerciseRemindersOn, { v -> vm.saveSettings { copy(exerciseRemindersOn = v) } },
+            if (st.exerciseRemindersOn) "${st.leadMinutes} minutes before each session" else "Off")
+        if (st.exerciseRemindersOn) {
+            ListRow("Exercise times", st.exerciseTimes.joinToString(", ") { "${it.exerciseName} · ${fmtClock(it.time)}" }.ifBlank { "Set after you save a plan" },
+                { vm.go(Screen.ReminderTimes(false, false)) })
+            ListRow("How early to remind me", "${st.leadMinutes} minutes before", { dialog = "lead" })
+        }
+
+        SectionLabel("Medicines")
+        ToggleRow("Medicine reminders", st.medRemindersOn, { v -> vm.saveSettings { copy(medRemindersOn = v) } },
+            if (st.medRemindersOn) "At the times set for each medicine" else "Off")
+        if (st.medRemindersOn) {
+            ToggleRow("Show medicine names on the lock screen", st.showMedNames, { v -> vm.saveSettings { copy(showMedNames = v) } },
+                "When off, the notification says \"Time for your medicine\".")
+            val meds = s.meds.filter { !it.stopped }
+            ListRow("My medicines and times", meds.joinToString(", ") { it.name }.ifBlank { "None added yet" }, { vm.go(Screen.Medicines) })
+        }
+
+        SectionLabel("Check-ins")
+        ToggleRow("Daily check-in", st.checkInRemindersOn, { v -> vm.saveSettings { copy(checkInRemindersOn = v) } },
+            if (st.checkInRemindersOn) "Every day at ${fmtClock(st.checkInTime)}" else "Off")
+        if (st.checkInRemindersOn) ListRow("Daily check-in time", fmtClock(st.checkInTime), { dialog = "daily" })
+        ToggleRow("Weekly check-in", st.weeklyOn, { v -> vm.saveSettings { copy(weeklyOn = v) } },
+            if (st.weeklyOn) "${DayOfWeek.of(st.weeklyDay).getDisplayName(TextStyle.FULL, Locale.getDefault())}s at ${fmtClock(st.weeklyTime)}" else "Off")
+        if (st.weeklyOn) ListRow("Weekly check-in day and time",
+            "${DayOfWeek.of(st.weeklyDay).getDisplayName(TextStyle.SHORT, Locale.getDefault())} ${fmtClock(st.weeklyTime)}", { dialog = "weekly" })
+
+        SectionLabel("Quiet hours")
+        ToggleRow("Quiet hours", st.quietOn, { v -> vm.saveSettings { copy(quietOn = v) } },
+            if (st.quietOn) "No reminders from ${fmtClock(st.quietStart)} to ${fmtClock(st.quietEnd)}" else "Off")
+        if (st.quietOn) {
+            ListRow("Quiet hours times", "${fmtClock(st.quietStart)} to ${fmtClock(st.quietEnd)}", { dialog = "quiet" })
+            Hint("Medicines you mark as important can still remind you during quiet hours.")
+        }
+
         when (dialog) {
-            "lead" -> ChoiceDialog("Remind me", listOf(5, 10, 15, 30, 60).map { it.toString() to "$it minutes before" }, st.leadMinutes.toString(), { v ->
-                vm.saveSettings { copy(leadMinutes = v.toInt(), exerciseTimes = exerciseTimes.map { it.copy(leadMinutes = v.toInt()) }) }; dialog = null }, { dialog = null })
+            "lead" -> ChoiceDialog("Remind me", LEAD_OPTIONS, st.leadMinutes.toString(), { v ->
+                vm.saveSettings { copy(leadMinutes = v.toInt(), exerciseTimes = exerciseTimes.map { it.copy(leadMinutes = v.toInt()) }) }; dialog = null }, { dialog = null }, LEAD_DESCRIPTIONS)
             "daily" -> TimeDialog(st.checkInTime, { dialog = null }, { t -> vm.saveSettings { copy(checkInTime = t) }; dialog = null })
             "weekly" -> WeeklyDialog(st.weeklyDay, st.weeklyTime, { d, t -> vm.saveSettings { copy(weeklyDay = d, weeklyTime = t) }; dialog = null }, { dialog = null })
             "quiet" -> QuietDialog(st.quietStart, st.quietEnd, { a, b -> vm.saveSettings { copy(quietStart = a, quietEnd = b) }; dialog = null }, { dialog = null })
         }
+    }
+}
+
+/**
+ * Shows whether reminders can reach the person, with a one-tap fix for each problem,
+ * and buttons to send a test. Re-checked every time the screen comes back from system settings.
+ */
+@Composable
+private fun NotificationStatus(vm: AppViewModel) {
+    val ctx = LocalContext.current
+    var allowed by remember { mutableStateOf(Reminders.notificationsAllowed(ctx)) }
+    var channelsOn by remember { mutableStateOf(Reminders.channelsAllowed(ctx)) }
+    var onTime by remember { mutableStateOf(Reminders.canRingOnTime(ctx)) }
+    var denied by remember { mutableStateOf(false) }
+    var testMessage by remember { mutableStateOf<String?>(null) }
+
+    fun refresh() {
+        val wasOnTime = onTime
+        allowed = Reminders.notificationsAllowed(ctx)
+        channelsOn = Reminders.channelsAllowed(ctx)
+        onTime = Reminders.canRingOnTime(ctx)
+        if (onTime != wasOnTime) vm.rescheduleReminders()   // move existing alarms onto the exact path
+    }
+    LifecycleEventEffect(Lifecycle.Event.ON_RESUME) { refresh() }
+
+    val askPermission = rememberLauncherForActivityResult(ActivityResultContracts.RequestPermission()) { granted ->
+        denied = !granted
+        refresh()
+    }
+    fun openAppNotificationSettings() {
+        val i = Intent(Settings.ACTION_APP_NOTIFICATION_SETTINGS).putExtra(Settings.EXTRA_APP_PACKAGE, ctx.packageName)
+        runCatching { ctx.startActivity(i) }.onFailure {
+            ctx.startActivity(Intent(Settings.ACTION_APPLICATION_DETAILS_SETTINGS, Uri.fromParts("package", ctx.packageName, null)))
+        }
+    }
+    fun turnOn() {
+        val canAsk = Build.VERSION.SDK_INT >= 33 && !denied &&
+            ContextCompat.checkSelfPermission(ctx, Manifest.permission.POST_NOTIFICATIONS) != PackageManager.PERMISSION_GRANTED
+        if (canAsk) askPermission.launch(Manifest.permission.POST_NOTIFICATIONS) else openAppNotificationSettings()
+    }
+
+    when {
+        !allowed -> AmberNotice("Notifications are off", "You won't get any reminders until you turn them on.") {
+            PrimaryButton(if (denied) "Open phone settings" else "Turn on notifications", ::turnOn, icon = Icons.Outlined.NotificationsActive)
+        }
+        !channelsOn -> AmberNotice("Some reminders are switched off", "One or more reminder types are turned off in your phone settings.") {
+            PrimaryButton("Open phone settings", ::openAppNotificationSettings)
+        }
+        else -> GreenPanel {
+            Row(verticalAlignment = Alignment.CenterVertically, horizontalArrangement = Arrangement.spacedBy(8.dp)) {
+                Icon(Icons.Outlined.CheckCircle, null, tint = GreenDark)
+                Text("Notifications are on", color = GreenDark, style = MaterialTheme.typography.titleSmall)
+            }
+        }
+    }
+    if (allowed && !onTime && Build.VERSION.SDK_INT >= 31) {
+        AmberNotice("Reminders may be late", "Without \"Alarms & reminders\" access, Android can deliver a reminder up to an hour late.") {
+            SecondaryButton("Allow on-time reminders", {
+                val i = Intent(Settings.ACTION_REQUEST_SCHEDULE_EXACT_ALARM, Uri.fromParts("package", ctx.packageName, null))
+                runCatching { ctx.startActivity(i) }
+            })
+        }
+    }
+
+    Panel {
+        Text("Test a reminder", style = MaterialTheme.typography.titleSmall)
+        Hint("Check that reminders reach you on this phone.")
+        SecondaryButton("Send a test now", {
+            testMessage = if (Reminders.sendTestNow(ctx)) "Sent. Look at the top of your screen." else { refresh(); "Couldn't send. Turn on notifications first." }
+        }, enabled = allowed, icon = Icons.Outlined.NotificationsActive)
+        SecondaryButton("Send a test in 10 seconds", {
+            Reminders.sendTestLater(ctx, 10)
+            testMessage = if (onTime) "Scheduled. Lock your phone; it should arrive in about 10 seconds."
+                else "Scheduled. Without on-time access Android may delay it by several minutes."
+        }, enabled = allowed, icon = Icons.Outlined.Schedule)
+        testMessage?.let { Text(it, style = MaterialTheme.typography.bodySmall, color = secondaryText()) }
     }
 }
 
@@ -242,7 +358,7 @@ fun CalendarScreen(s: AppState, vm: AppViewModel) {
         }
         if (st.calendarLinked && !canRead) AmberNotice(text = "We can't read your calendar right now (permission was removed), so we're using the times you set.")
         if (st.calendarLinked) {
-            ToggleRow("Suggest times for my exercises", st.suggestTimes, { v -> vm.saveSettings { copy(suggestTimes = v) } })
+            ToggleRow("Suggest times for my exercises", st.suggestTimes, { v -> vm.saveSettings { copy(suggestTimes = v) } }, "Based on when your calendar shows you're free.")
             DestructiveButton("Unlink my calendar", vm::unlinkCalendar)
         } else CalendarLinkOptions(s, vm) { }
         Panel {
@@ -271,7 +387,7 @@ fun OnboardCalendarScreen(s: AppState, vm: AppViewModel) {
 fun TextSizeScreen(s: AppState, vm: AppViewModel) {
     Page(title = "Text size and display", onBack = vm::back) {
         TextSizeChoice.entries.forEach { c ->
-            OptionCard(s.settings.textSize == c.name, c.label, { vm.saveSettings { copy(textSize = c.name) } }, if (c == TextSizeChoice.NORMAL) "Body text 18 pt" else if (c == TextSizeChoice.LARGE) "A bit bigger" else "Much bigger")
+            OptionCard(s.settings.textSize == c.name, c.label, { vm.saveSettings { copy(textSize = c.name) } }, c.description)
         }
         ToggleRow("High contrast", s.settings.highContrast, { v -> vm.saveSettings { copy(highContrast = v) } }, "Black text on white, thicker borders")
         Hint("Text also follows your phone's own text size setting.")

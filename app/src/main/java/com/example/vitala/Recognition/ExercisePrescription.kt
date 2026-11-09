@@ -71,7 +71,9 @@ data class AdjustmentRule(
 
 data class StopRule(
     val level: StopLevel,
-    val trigger: String
+    val trigger: String,               // copied in full from the sheet
+    /** 2-4 word label shown in bold above [trigger]. Null for plans saved before labels existed. */
+    val summary: String? = null
 )
 
 /** Ordered from most to least urgent. */
@@ -80,6 +82,15 @@ enum class StopLevel(val wire: String, val title: String) {
     STOP_AND_SEEK_ASSESSMENT("stop_and_seek_assessment", "Stop and get assessed"),
     CONTACT_TEAM("contact_team", "Contact your physio team"),
     PAUSE("pause", "Pause the session");
+
+    /** General title for a safety question when the plan has no short label of its own. */
+    val questionTitle: String
+        get() = when (this) {
+            URGENT_CARE -> "Urgent warning signs"
+            STOP_AND_SEEK_ASSESSMENT -> "Signs to get checked"
+            CONTACT_TEAM -> "Problems that keep going"
+            PAUSE -> "Discomfort that won't settle"
+        }
 
     companion object {
         /** Unknown values map to the most cautious level the sheet could mean. */

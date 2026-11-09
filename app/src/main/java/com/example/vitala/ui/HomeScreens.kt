@@ -22,6 +22,8 @@ import androidx.compose.material.icons.outlined.AccessibilityNew
 import androidx.compose.material.icons.outlined.Medication
 import androidx.compose.material.icons.outlined.PlayArrow
 import androidx.compose.material3.Icon
+import androidx.compose.material.icons.outlined.Notifications
+import androidx.compose.material3.IconButton
 import androidx.compose.material3.MaterialTheme
 import androidx.compose.material3.Text
 import androidx.compose.runtime.Composable
@@ -63,7 +65,7 @@ private fun greeting(): String {
     return if (h < 12) "Good morning" else if (h < 18) "Good afternoon" else "Good evening"
 }
 
-private fun doseSummary(items: List<TodayItem>, day: DayRec, upTo: Boolean): String {
+private fun doseSummary(items: List<TodayItem>, day: DayRec): String {
     val minutes = if (day.pain != null && !day.blocked && day.exercises.isNotEmpty())
         day.exercises.filter { it.dimension == "MINUTES" }.mapNotNull { it.levelDose(day) }.sum()
     else items.filter { it.dimension == DoseDimension.MINUTES }.sumOf { it.upTo ?: 0.0 }
@@ -73,7 +75,7 @@ private fun doseSummary(items: List<TodayItem>, day: DayRec, upTo: Boolean): Str
         other != null -> Dose.fmt(other.dimension, other.upTo ?: 0.0)
         else -> ""
     }
-    return if (upTo && text.isNotBlank()) "Up to $text" else text
+    return text
 }
 
 private fun DayExercise.levelDose(day: DayRec): Double? = when (day.levelChosen) {
@@ -101,17 +103,21 @@ fun HomeScreen(s: AppState, vm: AppViewModel, bar: @Composable () -> Unit) {
             Text(if (checkedIn) "Done today" else "Not done yet · about 3 minutes", style = MaterialTheme.typography.bodySmall, color = secondaryText())
         }
     ) {
-        Column {
-            Text(today.format(DateTimeFormatter.ofPattern("EEEE, MMMM d")), color = secondaryText(), style = MaterialTheme.typography.bodySmall)
-            Text("${greeting()}${if (s.profile.firstName.isNotBlank()) ", ${s.profile.firstName}" else ""}", style = MaterialTheme.typography.headlineMedium)
+        Row(verticalAlignment = Alignment.CenterVertically) {
+            Column(Modifier.weight(1f)) {
+                Text(today.format(DateTimeFormatter.ofPattern("EEEE, MMMM d")), color = secondaryText(), style = MaterialTheme.typography.bodySmall)
+                Text("${greeting()}${if (s.profile.firstName.isNotBlank()) ", ${s.profile.firstName}" else ""}", style = MaterialTheme.typography.headlineMedium)
+            }
+            IconButton(onClick = { vm.go(Screen.Notifications) }, modifier = Modifier.size(56.dp)) {
+                Icon(Icons.Outlined.Notifications, contentDescription = "Notifications and reminders", tint = actionColor())
+            }
         }
         s.message?.let { m -> GreenPanel { Text(m, color = GreenDark, style = MaterialTheme.typography.titleSmall) } }
         ErrorText(s.error)
 
         if (pegDue) {
-            AmberNotice("Weekly check-in is ready", "3 quick questions · about 1 minute") {
+            AmberNotice("Weekly check-in is ready", "3 questions about your past week · about 1 minute") {
                 PrimaryButton("Start", { vm.go(Screen.Weekly(0)) })
-                LinkButton("Not today", vm::postponePeg)
             }
         }
 
@@ -124,7 +130,8 @@ fun HomeScreen(s: AppState, vm: AppViewModel, bar: @Composable () -> Unit) {
             }
             sessions.isEmpty() -> Panel {
                 Text("No plan yet", style = MaterialTheme.typography.titleSmall)
-                Hint("Add your plan on the Plan tab. It stays the boundary for everything we suggest.")
+                Hint("Add your clinician's plan on the Plan tab.")
+                Hint("Every time and level the app suggests stays within that plan.")
                 SecondaryButton("Go to Plan", { vm.selectTab(Tab.PLAN) })
             }
             else -> sessions.forEach { (time, items) -> ExerciseCard(s, vm, time, items, dayToday) }
@@ -141,7 +148,7 @@ fun HomeScreen(s: AppState, vm: AppViewModel, bar: @Composable () -> Unit) {
         SectionLabel("Medicines")
         MedicinesToday(s, vm)
 
-        LinkButton("Something changed", { vm.go(Screen.SomethingChanged) }, Modifier.align(Alignment.CenterHorizontally))
+        LinkButton("Log a change: illness, medicine or activity", { vm.go(Screen.SomethingChanged) }, Modifier.align(Alignment.CenterHorizontally))
     }
 }
 
@@ -158,7 +165,7 @@ private fun ExerciseCard(s: AppState, vm: AppViewModel, time: String, items: Lis
                 Text("Today's exercises", style = MaterialTheme.typography.titleMedium)
                 if (!started) Text("Starts ${items.first().compiled.plan.programStart.format(DateTimeFormatter.ofPattern("MMM d"))}", style = MaterialTheme.typography.bodySmall)
                 else if (day.logged && day.levelChosen == Level.REST.name) Text("Rest day · $clock", style = MaterialTheme.typography.bodySmall, color = secondaryText())
-                else Text("${doseSummary(items, day, upTo = day.pain == null)} · $clock", style = MaterialTheme.typography.bodySmall, color = secondaryText())
+                else Text("${doseSummary(items, day)} · $clock", style = MaterialTheme.typography.bodySmall, color = secondaryText())
             }
         }
         Text(items.joinToString(", ") { it.name } + " · " + (if (items.size == 1) "1 exercise" else "${items.size} exercises"),
@@ -166,10 +173,9 @@ private fun ExerciseCard(s: AppState, vm: AppViewModel, time: String, items: Lis
         when {
             day.logged -> Row(verticalAlignment = Alignment.CenterVertically) {
                 Icon(Icons.Filled.Check, null, tint = GreenDark); Spacer(Modifier.width(6.dp))
-                Text(if (day.levelChosen == Level.REST.name) "Rest day saved. Nothing to make up." else "Logged today", color = GreenDark, style = MaterialTheme.typography.titleSmall)
+                Text(if (day.levelChosen == Level.REST.name) "Rest day saved. You don't need to make it up." else "Logged today", color = GreenDark, style = MaterialTheme.typography.titleSmall)
             }
-            day.pain == null -> Hint("Time is confirmed after you rate your pain.")
-            day.blocked -> Hint("Please read today's message first.")
+            day.blocked -> Hint("Read today's safety message before you start.")
         }
         SecondaryButton("See exercises", { vm.go(Screen.ExerciseDetail(time)) })
     }
@@ -183,7 +189,7 @@ private fun MedicinesToday(s: AppState, vm: AppViewModel) {
             Row(verticalAlignment = Alignment.CenterVertically, horizontalArrangement = Arrangement.spacedBy(12.dp)) {
                 Column(Modifier.weight(1f)) {
                     Text("No medicines added yet", style = MaterialTheme.typography.titleSmall)
-                    Hint("Add one to get reminders.")
+                    Hint("Add a medicine to get a reminder at each time you take it.")
                 }
                 SecondaryButton("Add", { vm.go(Screen.EditMedicine(null)) }, Modifier.width(110.dp))
             }
@@ -245,10 +251,10 @@ fun ExerciseDetailScreen(s: AppState, vm: AppViewModel, time: String) {
     ) {
         GreenPanel {
             Text("TODAY'S SESSION", color = GreenDark, style = MaterialTheme.typography.labelMedium, fontWeight = FontWeight.Bold)
-            Text(doseSummary(items, if (day.pain != null) day else DayRec(), upTo = true).ifBlank { "Rest" }, style = MaterialTheme.typography.titleLarge, textAlign = TextAlign.Center)
-            Text("The most your plan allows today. Time includes short rests.", style = MaterialTheme.typography.bodySmall, color = secondaryText(), textAlign = TextAlign.Center)
+            Text(doseSummary(items, if (day.pain != null) day else DayRec()).ifBlank { "Rest" }, style = MaterialTheme.typography.titleLarge, textAlign = TextAlign.Center)
+            Text("Time includes short rests.", style = MaterialTheme.typography.bodySmall, color = secondaryText(), textAlign = TextAlign.Center)
         }
-        if (day.logged) GreenPanel { Text("Done for today. Well done for checking in.", color = GreenDark, style = MaterialTheme.typography.titleSmall) }
+        if (day.logged) GreenPanel { Text("Today's session is logged.", color = GreenDark, style = MaterialTheme.typography.titleSmall) }
         if (items.any { it.notStarted }) AmberNotice(text = "Your plan starts on ${items.first().compiled.plan.programStart.format(DateTimeFormatter.ofPattern("MMMM d"))}.")
         SectionLabel("How to do it")
         items.forEach { item ->
@@ -276,11 +282,11 @@ fun ExerciseDetailScreen(s: AppState, vm: AppViewModel, time: String) {
 @Composable
 fun BeforeStartScreen(s: AppState, vm: AppViewModel) {
     val areas = vm.todayItems().mapNotNull { s.programs[it.plan.id]?.source?.bodyArea?.takeIf { a -> a.isNotBlank() } }.distinct()
-    val title = if (areas.size == 1) "How much familiar ${areas.first()} pain do you have right now?" else "How much familiar pain do you have right now?"
+    val question = if (areas.size == 1) "How much familiar ${areas.first()} pain do you have right now?" else "How much familiar pain do you have right now?"
     var pain by rememberSaveable { mutableStateOf(s.pendingPain) }
     val questions = vm.safetyQuestions()
     Page(
-        title = title, subtitle = "Rate it before every session, at about the same time each day.",
+        title = "Pain right now", subtitle = "$question Rate it before each session, at the same time of day if you can.",
         onBack = vm::back, topRight = "Before you start",
         actions = {
             PrimaryButton("Next", {
@@ -301,13 +307,14 @@ fun SafetyQuestionsScreen(s: AppState, vm: AppViewModel) {
     val questions = vm.safetyQuestions()
     var ticked by remember { mutableStateOf(setOf<String>()) }
     Page(
-        title = "Anything like this today?", subtitle = "Tick any that apply. Leave them empty if none do. These come from your plan.",
+        title = "Do you have any of these right now?", subtitle = "Tick each one you have. If none apply, tap Next.",
         onBack = vm::back,
         actions = { PrimaryButton("Next", { vm.submitPreSession(s.pendingPain ?: 0, ticked) }, enabled = !s.busy) }
     ) {
-        questions.forEach { q ->
-            CheckCard(q in ticked, q, { on -> ticked = if (on) ticked + q else ticked - q })
+        questions.forEach { (title, q) ->
+            CheckCard(q in ticked, title, { on -> ticked = if (on) ticked + q else ticked - q }, q.replaceFirstChar { it.uppercase() })
         }
+        Hint("These warning signs come from your clinician's plan.")
         Busy(s.busy); ErrorText(s.error)
     }
 }
@@ -333,7 +340,7 @@ fun SessionTodayScreen(s: AppState, vm: AppViewModel) {
             Text("TODAY'S SESSION", color = GreenDark, style = MaterialTheme.typography.labelMedium, fontWeight = FontWeight.Bold)
             Text(big, style = MaterialTheme.typography.headlineLarge, textAlign = TextAlign.Center)
             if (exercises.size > 1) exercises.forEach { Text("${it.name}: ${it.doseValue?.let { v -> Dose.fmt(it.dimension, v) } ?: ""}", style = MaterialTheme.typography.bodySmall) }
-            Text("Once today · includes short rests", style = MaterialTheme.typography.bodySmall, color = secondaryText())
+            Text("Once today · time includes short rests", style = MaterialTheme.typography.bodySmall, color = secondaryText())
         }
         if (increase.isNotEmpty()) {
             Panel(color = AmberTint) {
@@ -350,7 +357,7 @@ fun SessionTodayScreen(s: AppState, vm: AppViewModel) {
             exercises.map { it.reason }.distinct().forEach { Text(it, style = MaterialTheme.typography.bodyLarge) }
             exercises.map { it.note }.filter { it.isNotBlank() }.distinct().forEach { Hint(it) }
         }
-        Hint("You choose. Any level your plan allows is fine, including resting.")
+        Hint("You can pick any level your plan allows, including a rest day.")
         Busy(s.busy); ErrorText(s.error)
     }
 }
@@ -366,17 +373,17 @@ fun ChooseLevelScreen(s: AppState, vm: AppViewModel) {
     val showShorter = ex.any { e -> (e.minimumValue ?: Double.MAX_VALUE) < (e.doseValue ?: 0.0) }
     var choice by remember { mutableStateOf(Level.PLANNED) }
     Page(
-        title = "Today's level", subtitle = "We suggest $planned. You choose.", onBack = vm::back,
+        title = "Today's level", subtitle = "Suggested: $planned. You can pick another level.", onBack = vm::back,
         actions = {
             PrimaryButton(if (choice == Level.REST) "Save a rest day" else "Start: ${text(choice)}", {
                 if (choice == Level.REST) vm.startSession(Level.REST) { vm.toHome() } else vm.startSession(choice) { vm.go(Screen.Timer) }
             }, enabled = !s.busy)
         }
     ) {
-        OptionCard(choice == Level.PLANNED, "Planned: $planned", { choice = Level.PLANNED }, "As planned. Slow, comfortable, with short rests.", badge = "Suggested")
+        OptionCard(choice == Level.PLANNED, "Planned: $planned", { choice = Level.PLANNED }, "Your full session. Go slowly and comfortably, with short rests.", badge = "Suggested")
         if (showShorter) OptionCard(choice == Level.SHORTER, "Shorter: $shorter", { choice = Level.SHORTER }, "The smallest session your plan allows.")
         OptionCard(choice == Level.REST, "Rest today", { choice = Level.REST }, "Skip the session. It is logged as missed and is not made up later.")
-        Hint("Only options from your plan are shown.")
+        Hint("Only levels your plan allows are shown.")
         Busy(s.busy); ErrorText(s.error)
     }
 }
@@ -417,11 +424,11 @@ fun TimerScreen(s: AppState, vm: AppViewModel) {
                 }
             }
         }
-        if (finished) GreenPanel { Text("Time's up. Tap Finish when you're ready.", color = GreenDark, style = MaterialTheme.typography.titleSmall) }
+        if (finished) GreenPanel { Text("Time's up. Tap Finish session to log it.", color = GreenDark, style = MaterialTheme.typography.titleSmall) }
         s.day.exercises.firstOrNull { it.instructions.isNotBlank() }?.let { Panel { Text(it.instructions.lines().firstOrNull { l -> l.isNotBlank() }.orEmpty(), style = MaterialTheme.typography.bodyLarge) } }
         val rx = s.programs.values.firstOrNull()?.source
         SafetyPanel(rx?.let { r -> r.stopRules.firstOrNull { it.level == com.example.vitala.Recognition.StopLevel.PAUSE }?.trigger?.let { "Pause: $it" } } ?: "Pause if discomfort keeps building or feels different from usual.")
-        Hint("A timer alone doesn't count as exercise. You'll confirm what you really did.")
+        Hint("The timer doesn't log your session. Next, you'll enter how long you actually exercised.")
     }
 }
 
@@ -444,12 +451,12 @@ fun ExerciseLogContent(s: AppState, vm: AppViewModel, assignedOnly: Boolean = tr
         )
         if (ex.size > 1) Hint(e.name)
     }
-    Text("How did it feel afterwards?", style = MaterialTheme.typography.titleSmall)
+    Question("Pain after the session", "Compared with the range you and your clinician agreed is OK.")
     listOf(
-        SymptomResponse.WITHIN_RANGE to "Familiar, within my agreed range",
-        SymptomResponse.BEYOND_RANGE to "Familiar, more than agreed",
-        SymptomResponse.NEW_OR_DIFFERENT to "New or different"
-    ).forEach { (v, t) -> OptionCard(l.symptom == v, t, { vm.updateLog { copy(symptom = v) } }) }
+        Triple(SymptomResponse.WITHIN_RANGE, "Within my range", "Familiar pain, no more than my clinician and I agreed is OK."),
+        Triple(SymptomResponse.BEYOND_RANGE, "More than agreed", "Familiar pain, but more than my agreed range."),
+        Triple(SymptomResponse.NEW_OR_DIFFERENT, "New or different", "Pain or symptoms I haven't had before.")
+    ).forEach { (v, t, d) -> OptionCard(l.symptom == v, t, { vm.updateLog { copy(symptom = v) } }, d) }
     if (l.symptom == SymptomResponse.NEW_OR_DIFFERENT) {
         // EX-6: the plan's own review instruction is shown right away.
         val contact = ex.firstOrNull { it.clinicContact.isNotBlank() }?.clinicContact
@@ -458,30 +465,37 @@ fun ExerciseLogContent(s: AppState, vm: AppViewModel, assignedOnly: Boolean = tr
             title = "New or different symptoms"
         )
     }
-    Text("Any new symptoms?", style = MaterialTheme.typography.titleSmall)
-    val options = listOf("None", "Numbness", "Tingling", "Weakness", "Swelling", "Other")
-    options.chunked(2).forEach { row ->
-        ChipRow {
-            row.forEach { o ->
-                ChoiceChip(o in l.newSymptoms, o, {
-                    vm.updateLog {
-                        copy(newSymptoms = when {
-                            o == "None" -> setOf("None")
-                            o in newSymptoms -> newSymptoms - o
-                            else -> (newSymptoms - "None") + o
-                        })
-                    }
-                }, Modifier.weight(1f))
+    Question("New symptoms", "Tick any you noticed after the session.")
+    val options = listOf(
+        "None" to "Nothing new after this session.",
+        "Numbness" to "Less feeling than usual, or a dull, dead feeling.",
+        "Tingling" to "Pins and needles.",
+        "Weakness" to "Harder than usual to grip, lift or move.",
+        "Swelling" to "Puffiness or tightness around the area.",
+        "Other" to "Something else that's new for you."
+    )
+    options.forEach { (o, d) ->
+        CheckCard(o in l.newSymptoms, o, {
+            vm.updateLog {
+                copy(newSymptoms = when {
+                    o == "None" -> setOf("None")
+                    o in newSymptoms -> newSymptoms - o
+                    else -> (newSymptoms - "None") + o
+                })
             }
-        }
+        }, d)
     }
     if (anyShort) {
-        Text("What got in the way? (optional)", style = MaterialTheme.typography.titleSmall)
-        val reasons = listOf(StopReason.PAIN to "Discomfort", StopReason.FATIGUE to "Fatigue", StopReason.NO_TIME to "Practical reason", StopReason.OTHER to "Other")
-        reasons.chunked(2).forEach { row ->
-            ChipRow { row.forEach { (r, t) -> ChoiceChip(l.stopReason == r, t, { vm.updateLog { copy(stopReason = r) } }, Modifier.weight(1f)) } }
-        }
-        ex.firstOrNull { it.reason.isNotBlank() }?.let { Hint("If you stopped early, follow your plan's note for a short session. A practical reason never lowers your plan.") }
+        Question("Why you stopped early", "Optional.")
+        val reasons = listOf(
+            Triple(StopReason.PAIN, "Discomfort", "Pain or discomfort made me stop."),
+            Triple(StopReason.FATIGUE, "Fatigue", "I was too tired to keep going."),
+            Triple(StopReason.NO_TIME, "Practical reason", "Time, an interruption or something else came up."),
+            Triple(StopReason.OTHER, "Other", "A different reason.")
+        )
+        reasons.forEach { (r, t, d) -> OptionCard(l.stopReason == r, t, { vm.updateLog { copy(stopReason = r) } }, d) }
+        ex.firstOrNull { it.reason.isNotBlank() }?.let { Hint("Follow your plan's note for short sessions.")
+            Hint("Choosing Practical reason never lowers your plan.") }
     }
 }
 
@@ -516,14 +530,15 @@ fun SafetyBlockScreen(s: AppState, vm: AppViewModel) {
         title = title, onBack = null,
         actions = {
             PrimaryButton("Back to Home", vm::toHome)
-            if (ex?.action != "NOT_STARTED") LinkButton("I answered by mistake", { vm.clearToday(); vm.showResult(Screen.BeforeStart) })
+            if (ex?.action != "NOT_STARTED") LinkButton("I answered by mistake: start again", { vm.clearToday(); vm.showResult(Screen.BeforeStart) })
         }
     ) {
         if (tone) SafetyPanel(ex?.instructions?.ifBlank { null } ?: ex?.reason.orEmpty(), title = "From your plan")
         else Text(ex?.reason.orEmpty(), style = MaterialTheme.typography.bodyLarge)
         ex?.clinicContact?.takeIf { it.isNotBlank() }?.let { Panel { Text("Who to contact", style = MaterialTheme.typography.titleSmall); Text(it) } }
         if (tone) SafetyPanel(Safety.GENERIC)
-        if (tone) Hint("No change to your exercise is suggested until this is looked at. Nothing is lost: your answers are saved.")
+        if (tone) Hint("Your exercise level won't change until your clinician has reviewed this.")
+        if (tone) Hint("Your answers are saved.")
     }
 }
 
@@ -546,19 +561,19 @@ fun SuggestedTimeScreen(s: AppState, vm: AppViewModel) {
             } else SecondaryButton("Back", vm::back)
         }
     ) {
-        if (sug == null) { Text(s.calendarNote ?: "No suggestion right now. Your usual time is fine."); return@Page }
+        if (sug == null) { Text(s.calendarNote ?: "No other time to suggest today."); return@Page }
         Panel {
             Text(group.joinToString(", ") { it.name }, style = MaterialTheme.typography.titleSmall)
             Text("Your time: ${AppViewModel.fmtTime(sug.usual)}")
-            Hint(if (sug.usualBusy) "Your calendar shows you are busy then." else "You look free then. Nothing to change.")
+            Hint(if (sug.usualBusy) "Your calendar shows you are busy then." else "Your calendar shows you're free then.")
         }
         sug.suggested?.let {
             GreenPanel {
                 Text("WE SUGGEST", color = GreenDark, style = MaterialTheme.typography.labelMedium, fontWeight = FontWeight.Bold)
                 Text(AppViewModel.fmtTime(it), style = MaterialTheme.typography.headlineLarge)
-                if (sug.freeFrom != null && sug.freeTo != null) Text("You look free from ${AppViewModel.fmtTime(sug.freeFrom)} to ${AppViewModel.fmtTime(sug.freeTo)}.", style = MaterialTheme.typography.bodySmall)
+                if (sug.freeFrom != null && sug.freeTo != null) Text("Your calendar is free from ${AppViewModel.fmtTime(sug.freeFrom)} to ${AppViewModel.fmtTime(sug.freeTo)}.", style = MaterialTheme.typography.bodySmall)
             }
-            CheckCard(everyDay, "Use this time every day", { everyDay = it })
+            CheckCard(everyDay, "Use every day", { everyDay = it }, "Make this your exercise time every day, not just today.")
         }
         if (showOthers) sug.others.forEach { t ->
             SecondaryButton("Use ${AppViewModel.fmtTime(t)}", { vm.acceptTime(t, everyDay); vm.back() })
@@ -612,7 +627,7 @@ fun ExerciseReminderScreen(s: AppState, vm: AppViewModel, time: String) {
         Panel {
             Text(items.joinToString(", ") { it.name }.ifBlank { "Your exercise" }, style = MaterialTheme.typography.titleMedium)
             val sum = items.filter { it.dimension == DoseDimension.MINUTES }.sumOf { it.upTo ?: 0.0 }
-            if (sum > 0) Text("Up to ${Dose.fmt(DoseDimension.MINUTES, sum)} today", style = MaterialTheme.typography.bodySmall, color = secondaryText())
+            if (sum > 0) Text("${Dose.fmt(DoseDimension.MINUTES, sum)} today", style = MaterialTheme.typography.bodySmall, color = secondaryText())
         }
     }
 }
@@ -622,7 +637,7 @@ fun SomethingChangedScreen(s: AppState, vm: AppViewModel) {
     var types by remember { mutableStateOf(setOf<ContextType>()) }
     var note by remember { mutableStateOf("") }
     Page(
-        title = "Anything different lately?", subtitle = "Tick any that apply. This helps explain your numbers.", onBack = vm::back,
+        title = "Recent changes", subtitle = "Tick anything that's been different lately. It helps explain changes in your scores.", onBack = vm::back,
         actions = { PrimaryButton("Save", { vm.saveContext(types, note) }) }
     ) { ContextForm(types, { types = it }, note, { note = it }) }
 }
@@ -630,7 +645,7 @@ fun SomethingChangedScreen(s: AppState, vm: AppViewModel) {
 @Composable
 fun ContextForm(types: Set<ContextType>, onTypes: (Set<ContextType>) -> Unit, note: String, onNote: (String) -> Unit) {
     ContextType.entries.forEach { t ->
-        CheckCard(t in types, t.label, { on -> onTypes(if (on) types + t else types - t) })
+        CheckCard(t in types, t.shortLabel, { on -> onTypes(if (on) types + t else types - t) }, t.description)
     }
     LabeledField("Add a note (optional)", note, onNote, singleLine = false, minLines = 3)
 }

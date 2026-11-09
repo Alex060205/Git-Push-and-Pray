@@ -63,7 +63,7 @@ private fun DailyCheckIn.value(m: Metric): Int? = when (m) {
 
 private fun recoveryText(c: DailyCheckIn?): String = when (c?.recovery?.status) {
     RecoveryStatus.RETURNED -> "Back to normal" + (c.recovery?.time?.let { ", ${it.label}" } ?: "")
-    RecoveryStatus.STILL_ABOVE -> "Still more than normal"
+    RecoveryStatus.STILL_ABOVE -> "Still higher"
     RecoveryStatus.UNSURE -> "Not sure"
     null -> "Not asked"
 }
@@ -72,7 +72,7 @@ private fun recoveryText(c: DailyCheckIn?): String = when (c?.recovery?.status) 
 private fun RecoveryMark(c: DailyCheckIn?, compact: Boolean) {
     val (icon, label) = when (c?.recovery?.status) {
         RecoveryStatus.RETURNED -> Icons.Filled.Check to "Normal"
-        RecoveryStatus.STILL_ABOVE -> Icons.Outlined.ArrowUpward to "Above"
+        RecoveryStatus.STILL_ABOVE -> Icons.Outlined.ArrowUpward to "Higher"
         RecoveryStatus.UNSURE -> Icons.Outlined.HelpOutline to "Unsure"
         null -> null to "–"
     }
@@ -356,15 +356,13 @@ fun EditDayScreen(s: AppState, vm: AppViewModel, date: LocalDate) {
         Stepper("$pain", "0 to 10", { pain = maxOf(0, pain - 1) }, { pain = minOf(10, pain + 1) }, "Pain average")
         Stepper("$fatigue", "0 to 10", { fatigue = maxOf(0, fatigue - 1) }, { fatigue = minOf(10, fatigue + 1) }, "Fatigue")
         Stepper("$life", "0 to 10", { life = maxOf(0, life - 1) }, { life = minOf(10, life + 1) }, "Daily life")
-        Text("Is your pain back to normal for you?", style = MaterialTheme.typography.titleSmall)
-        OptionCard(rec == null, "Not asked", { rec = null; recTime = null })
-        OptionCard(rec == RecoveryStatus.RETURNED, "Yes, back to normal", { rec = RecoveryStatus.RETURNED })
-        OptionCard(rec == RecoveryStatus.STILL_ABOVE, "Still more than normal", { rec = RecoveryStatus.STILL_ABOVE; recTime = null })
-        OptionCard(rec == RecoveryStatus.UNSURE, "Not sure", { rec = RecoveryStatus.UNSURE; recTime = null })
-        if (rec == RecoveryStatus.RETURNED) ChipRow {
-            listOf(RecoveryTime.SAME_DAY to "Same day", RecoveryTime.NEXT_DAY to "Next day", RecoveryTime.LATER to "Later").forEach { (v, t) ->
-                ChoiceChip(recTime == v, t, { recTime = v }, Modifier.weight(1f))
-            }
+        Question("Back to normal?", "Was your pain back to the level you and your clinician agreed is OK?")
+        OptionCard(rec == null, "Not asked", { rec = null; recTime = null }, "This wasn't recorded for this day.")
+        OptionCard(rec == RecoveryStatus.RETURNED, "Back to normal", { rec = RecoveryStatus.RETURNED }, "Pain settled to its usual level.")
+        OptionCard(rec == RecoveryStatus.STILL_ABOVE, "Still higher", { rec = RecoveryStatus.STILL_ABOVE; recTime = null }, "Pain stayed above its usual level.")
+        OptionCard(rec == RecoveryStatus.UNSURE, "Not sure", { rec = RecoveryStatus.UNSURE; recTime = null }, "Couldn't tell at the time.")
+        if (rec == RecoveryStatus.RETURNED) RECOVERY_TIMES.forEach { (v, t, desc) ->
+            OptionCard(recTime == v, t, { recTime = v }, desc)
         }
     }
 }
