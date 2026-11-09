@@ -21,12 +21,25 @@ Vitala handles the comparisons and calculations behind that next step. Instead o
 - Reminders and activity history.
 - PDF reports to support follow-up conversations.
 
+## How to access it
+
+Vitala currently runs on Android.
+
+1. Open our [Releases page](https://github.com/Alex060205/Git-Push-and-Pray/releases).
+2. Download `app-debug.apk` from the demo release.
+3. Open it on your Android phone and allow installation from that source if prompted.
+4. Launch Vitala and choose **Use demo user (Maria Lutke)** to explore the app.
+
+The demo uses fictional patient records. Prescription reading requires
+internet access and a configured Gemini API key.
+
+You can also build the app yourself by opening this repository in Android Studio.
+
 ## Links and materials
 
 - [GitHub repository](https://github.com/Alex060205/Git-Push-and-Pray)
 - [Interface mockups](mockup.pdf)
 - Slides: **[ADD LINK]**
-- Demo video: **[ADD LINK]**
 
 ## Credits
 
