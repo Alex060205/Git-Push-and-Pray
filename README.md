@@ -58,7 +58,12 @@ You can also build the app yourself by opening this repository in Android Studio
 
 ## Credits
 
-Built by the **Git-Push-and-Pray** team. See our [contributors](https://github.com/Alex060205/Git-Push-and-Pray/graphs/contributors).
+Built by the **Git-Push-and-Pray** team:
+- Alejandro Hernandez Garcia
+- Madison Levy
+- Arturo Cachon Torres
+- Shen Zhou
+- Neth Mackenzy
 
 We used Gemini for prescription interpretation.
 
